@@ -1,0 +1,11 @@
+{
+  "name": "@mastera/config",
+  "version": "3.4.0",
+  "private": true,
+  "main": "index.js",
+  "files": [
+    "tsconfig.base.json",
+    ".eslintrc.js",
+    ".prettierrc.js"
+  ]
+}
