@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "Mastera Student",
+    "slug": "mastera-student",
+    "version": "3.4.0",
+    "orientation": "portrait",
+    "scheme": "mastera",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.mastera.student"
+    }
+  }
+}
