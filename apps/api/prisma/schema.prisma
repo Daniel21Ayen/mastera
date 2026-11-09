@@ -1,0 +1,468 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  ACADEMIC_ADMIN
+  OPERATIONS_ADMIN
+}
+
+enum AcademicStream {
+  NATURAL
+  SOCIAL
+  COMMON
+}
+
+enum ContentCategory {
+  MODULES
+  NOTES
+  AMHARIC_NOTE
+  QUIZ_1
+  QUIZ_2
+  QUIZ_3
+}
+
+enum ExamCategory {
+  MID
+  FINAL
+  MOCK
+  COC
+}
+
+enum ContentStatus {
+  DRAFT
+  IN_REVIEW
+  PUBLISHED
+  INACTIVE
+}
+
+enum QuestionType {
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+  SHORT_ANSWER
+  BLANK_SPACE
+}
+
+enum OrderProductType {
+  SEMESTER_BUNDLE
+  BATCH_BUNDLE
+  FULL_COURSE_BUNDLE
+  BOTH_STREAMS_PACKAGE
+  EXTRA_SINGLE_COURSE
+}
+
+enum PricingMode {
+  CALCULATED
+  FIXED
+}
+
+enum OrderStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum EntitlementStatus {
+  ACTIVE
+  EXPIRED
+  REVOKED
+}
+
+enum RefundStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  PAID_OUT
+  ENTITLEMENT_REVOKED
+}
+
+model AdminUser {
+  id           String       @id @default(uuid()) @db.Uuid
+  name         String
+  email        String       @unique
+  passwordHash String       @map("password_hash")
+  adminRole    AdminRole    @map("admin_role")
+  totpSecret   String?      @map("totp_secret")
+  isActive     Boolean      @default(true) @map("is_active")
+  lastLoginAt  DateTime?    @map("last_login_at")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+  scopes       AdminScope[]
+
+  @@map("admin_user")
+}
+
+model AdminScope {
+  id           String  @id @default(uuid()) @db.Uuid
+  adminId      String  @map("admin_id") @db.Uuid
+  universityId String? @map("university_id") @db.Uuid
+  programId    String? @map("program_id") @db.Uuid
+  courseId     String? @map("course_id") @db.Uuid
+
+  admin AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId])
+  @@map("admin_scope")
+}
+
+model Counter {
+  key       String   @id
+  value     Int      @default(0)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("counters")
+}
+
+model University {
+  id        String    @id @default(uuid()) @db.Uuid
+  name      String
+  shortName String    @unique @map("short_name")
+  isActive  Boolean   @default(true) @map("is_active")
+  version   Int       @default(1)
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  programs  Program[]
+  courses   Course[]
+
+  @@map("university")
+}
+
+model Program {
+  id           String     @id @default(uuid()) @db.Uuid
+  universityId String     @map("university_id") @db.Uuid
+  name         String
+  isActive     Boolean    @default(true) @map("is_active")
+  version      Int        @default(1)
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+  university   University @relation(fields: [universityId], references: [id], onDelete: Cascade)
+  courses      Course[]
+
+  @@index([universityId])
+  @@map("program")
+}
+
+model Course {
+  id             String         @id @default(uuid()) @db.Uuid
+  code           String         @unique
+  title          String
+  universityId   String?        @map("university_id") @db.Uuid
+  programId      String?        @map("program_id") @db.Uuid
+  semester       Int
+  stream         AcademicStream
+  accent         String         @default("blue")
+  icon           String         @default("book")
+  freeAccess     Boolean        @default(false) @map("free_access")
+  freeTrialCount Int            @default(0) @map("free_trial_count")
+  priceETB       Int            @default(60) @map("price_etb")
+  contentVersion Int            @default(1) @map("content_version")
+  isActive       Boolean        @default(true) @map("is_active")
+  deletedAt      DateTime?      @map("deleted_at")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  university   University?   @relation(fields: [universityId], references: [id])
+  program      Program?      @relation(fields: [programId], references: [id])
+  bookGroups   BookGroup[]
+  contents     Content[]
+  examSets     ExamSet[]
+  orderItems   OrderItem[]
+  entitlements Entitlement[]
+  packages     CourseContentPackage[]
+
+  @@index([universityId, programId, semester, stream])
+  @@map("course")
+}
+
+model BookGroup {
+  id         String          @id @default(uuid()) @db.Uuid
+  courseId   String          @map("course_id") @db.Uuid
+  category   ContentCategory
+  code       String
+  title      String
+  subtitle   String          @default("")
+  orderIndex Int             @map("order_index")
+  version    Int             @default(1)
+  deletedAt  DateTime?       @map("deleted_at")
+  createdAt  DateTime        @default(now()) @map("created_at")
+  updatedAt  DateTime        @updatedAt @map("updated_at")
+
+  course   Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  chapters Content[]
+
+  @@index([courseId, category])
+  @@map("book_group")
+}
+
+model Content {
+  id                 String          @id @default(uuid()) @db.Uuid
+  courseId           String          @map("course_id") @db.Uuid
+  bookGroupId        String          @map("book_group_id") @db.Uuid
+  category           ContentCategory
+  orderIndex         Int             @map("order_index")
+  title              String
+  bodyMarkdownLatex  String          @default("") @map("body_markdown_latex")
+  pdfStorageKey      String?         @map("pdf_storage_key")
+  isFree             Boolean         @default(false) @map("is_free")
+  timeAllowedMinutes Int?            @map("time_allowed_minutes")
+  estimatedSizeBytes Int             @default(0) @map("estimated_size_bytes")
+  status             ContentStatus   @default(DRAFT)
+  authoredById       String          @map("authored_by") @db.Uuid
+  reviewedById       String?         @map("reviewed_by") @db.Uuid
+  version            Int             @default(1)
+  deletedAt          DateTime?       @map("deleted_at")
+  createdAt          DateTime        @default(now()) @map("created_at")
+  updatedAt          DateTime        @updatedAt @map("updated_at")
+
+  course    Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  bookGroup BookGroup  @relation(fields: [bookGroupId], references: [id], onDelete: Cascade)
+  questions Question[]
+
+  @@index([courseId, category, status])
+  @@map("content")
+}
+
+model ExamSet {
+  id                 String          @id @default(uuid()) @db.Uuid
+  examSetCode        String          @unique @map("exam_set_code")
+  category           ExamCategory
+  universityId       String?         @map("university_id") @db.Uuid
+  programId          String?         @map("program_id") @db.Uuid
+  courseId           String?         @map("course_id") @db.Uuid
+  semester           Int?
+  stream             AcademicStream?
+  year               String
+  title              String
+  timeAllowedMinutes Int             @map("time_allowed_minutes")
+  isFreeSample       Boolean         @default(false) @map("is_free_sample")
+  pdfStorageKey      String?         @map("pdf_storage_key")
+  status             ContentStatus   @default(DRAFT)
+  authoredById       String          @map("authored_by") @db.Uuid
+  reviewedById       String?         @map("reviewed_by") @db.Uuid
+  version            Int             @default(1)
+  deletedAt          DateTime?       @map("deleted_at")
+  createdAt          DateTime        @default(now()) @map("created_at")
+  updatedAt          DateTime        @updatedAt @map("updated_at")
+
+  course    Course?    @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  questions Question[]
+
+  @@index([category, courseId, status])
+  @@map("exam_set")
+}
+
+model Question {
+  id               String       @id @default(uuid()) @db.Uuid
+  examSetId        String?      @map("exam_set_id") @db.Uuid
+  quizChapterId    String?      @map("quiz_chapter_id") @db.Uuid
+  displayNumber    Int          @map("display_number")
+  questionType     QuestionType @map("question_type")
+  promptLatex      String       @map("prompt_latex")
+  optionsJson      Json?        @map("options_json")
+  correctOptionId  String?      @map("correct_option_id")
+  correctBoolean   Boolean?     @map("correct_boolean")
+  acceptedAnswers  Json?        @map("accepted_answers")
+  explanationLatex String       @map("explanation_latex")
+  status           ContentStatus @default(DRAFT)
+  authoredById     String       @map("authored_by") @db.Uuid
+  reviewedById     String?      @map("reviewed_by") @db.Uuid
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+
+  examSet     ExamSet? @relation(fields: [examSetId], references: [id], onDelete: Cascade)
+  quizChapter Content? @relation(fields: [quizChapterId], references: [id], onDelete: Cascade)
+
+  @@unique([examSetId, displayNumber])
+  @@unique([quizChapterId, displayNumber])
+  @@map("question")
+}
+
+model Student {
+  id                  String          @id @default(uuid()) @db.Uuid
+  studentCode         String          @unique @map("student_code")
+  localAccountId      String          @unique @map("local_account_id") @db.Uuid
+  fullName            String          @map("full_name")
+  identifier          String          @unique
+  passwordHash        String          @map("password_hash")
+  universityId        String          @map("university_id") @db.Uuid
+  programId           String          @map("program_id") @db.Uuid
+  semester            Int
+  stream              AcademicStream
+  boundDeviceHardware String?         @map("bound_device_hardware")
+  deviceBoundAt       DateTime?       @map("device_bound_at")
+  deviceLastSeenAt    DateTime?       @map("device_last_seen_at")
+  isActive            Boolean         @default(true) @map("is_active")
+  createdAt           DateTime        @default(now()) @map("created_at")
+  updatedAt           DateTime        @updatedAt @map("updated_at")
+
+  orders       Order[]
+  entitlements Entitlement[]
+
+  @@map("student")
+}
+
+model PricingConfig {
+  id                   String   @id @default(uuid()) @db.Uuid
+  configVersion        Int      @unique @map("config_version")
+  singleCoursesEnabled Boolean  @default(true) @map("single_courses_enabled")
+  renewalWindowDays    Int      @default(14) @map("renewal_window_days")
+  quoteExpiryMinutes   Int      @default(60) @map("quote_expiry_minutes")
+  maxReceiptSizeBytes  Int      @default(307200) @map("max_receipt_size_bytes")
+  bundlesJson          Json     @map("bundles_json")
+  bothStreamsPriceETB  Int      @default(700) @map("both_streams_price_etb")
+  bothStreamsDuration  Int      @default(365) @map("both_streams_duration")
+  extraCourseTiersJson Json     @map("extra_course_tiers_json")
+  paymentMethodsJson   Json     @map("payment_methods_json")
+  isActive             Boolean  @default(true) @map("is_active")
+  updatedByAdminId     String   @map("updated_by_admin_id") @db.Uuid
+  changeReason         String   @map("change_reason")
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  @@map("pricing_config")
+}
+
+model Order {
+  id                   String           @id @default(uuid()) @db.Uuid
+  studentId            String?          @map("student_id") @db.Uuid
+  localAccountId       String           @map("local_account_id") @db.Uuid
+  claimSecretHash      String           @map("claim_secret_hash")
+  pendingProfileJson   Json             @map("pending_profile_json")
+  pendingPasswordHash  String           @map("pending_password_hash")
+  deviceHardwareId     String           @map("device_hardware_id")
+  quoteSnapshotJson    Json             @map("quote_snapshot_json")
+  configVersion        Int              @map("config_version")
+  orderType            OrderProductType @map("order_type")
+  expectedAmountETB    Int              @map("expected_amount_etb")
+  durationDays         Int              @map("duration_days")
+  paymentMethodId      String           @map("payment_method_id")
+  transactionReference String           @unique @map("transaction_reference")
+  receiptStorageKey    String           @map("receipt_storage_key")
+  status               OrderStatus      @default(PENDING)
+  rejectionReason      String?          @map("rejection_reason")
+  reviewedByAdminId    String?          @map("reviewed_by_admin_id") @db.Uuid
+  approvedAt           DateTime?        @map("approved_at")
+  claimedAt            DateTime?        @map("claimed_at")
+  createdAt            DateTime         @default(now()) @map("created_at")
+  updatedAt            DateTime         @updatedAt @map("updated_at")
+
+  student      Student?      @relation(fields: [studentId], references: [id])
+  items        OrderItem[]
+  entitlements Entitlement[]
+  refunds      Refund[]
+
+  @@index([localAccountId])
+  @@index([status, createdAt])
+  @@map("order")
+}
+
+model OrderItem {
+  id                 String @id @default(uuid()) @db.Uuid
+  orderId            String @map("order_id") @db.Uuid
+  courseId           String @map("course_id") @db.Uuid
+  ordinalPosition    Int    @map("ordinal_position")
+  appliedUnitPrice   Int    @map("applied_unit_price")
+  appliedTierLabel   String @map("applied_tier_label")
+
+  order  Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id])
+
+  @@index([orderId])
+  @@map("order_item")
+}
+
+model Entitlement {
+  id                 String            @id @default(uuid()) @db.Uuid
+  studentId          String            @map("student_id") @db.Uuid
+  orderId            String?           @map("order_id") @db.Uuid
+  courseId           String            @map("course_id") @db.Uuid
+  productType        OrderProductType  @map("product_type")
+  startsAt           DateTime          @map("starts_at")
+  expiresAt          DateTime          @map("expires_at")
+  status             EntitlementStatus @default(ACTIVE)
+  revocationReason   String?           @map("revocation_reason")
+  revokedAt          DateTime?         @map("revoked_at")
+  revokedByAdminId   String?           @map("revoked_by_admin_id") @db.Uuid
+  createdAt          DateTime          @default(now()) @map("created_at")
+  updatedAt          DateTime          @updatedAt @map("updated_at")
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  order   Order?  @relation(fields: [orderId], references: [id])
+  course  Course  @relation(fields: [courseId], references: [id])
+
+  @@index([studentId, courseId, status])
+  @@map("entitlement")
+}
+
+model Refund {
+  id                 String       @id @default(uuid()) @db.Uuid
+  orderId            String       @map("order_id") @db.Uuid
+  amountETB          Int          @map("amount_etb")
+  status             RefundStatus @default(REQUESTED)
+  reason             String
+  requestedByAdminId String       @map("requested_by") @db.Uuid
+  approvedByAdminId  String?      @map("approved_by") @db.Uuid
+  payoutReference    String?      @map("payout_reference")
+  createdAt          DateTime     @default(now()) @map("created_at")
+  updatedAt          DateTime     @updatedAt @map("updated_at")
+
+  order Order @relation(fields: [orderId], references: [id])
+
+  @@index([orderId, status])
+  @@map("refund")
+}
+
+model AuditLog {
+  id            String   @id @default(uuid()) @db.Uuid
+  actorId       String?  @map("actor_id")
+  actorRole     String   @map("actor_role")
+  actorScope    Json?    @map("actor_scope")
+  action        String
+  resourceType  String   @map("resource_type")
+  resourceId    String?  @map("resource_id")
+  allowed       Boolean  @default(true)
+  reason        String?
+  previousValue Json?    @map("previous_value")
+  newValue      Json?    @map("new_value")
+  ipAddress     String?  @map("ip_address")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([action, createdAt])
+  @@index([actorId, createdAt])
+  @@map("audit_log")
+}
+
+model CourseContentPackage {
+  id            String   @id @default(uuid()) @db.Uuid
+  courseId      String   @map("course_id") @db.Uuid
+  version       Int      @default(1)
+  sizeBytes     Int      @map("size_bytes")
+  storageKey    String   @map("storage_key")
+  sha256Hex     String   @map("sha256_hex")
+  chaptersCount Int      @default(0) @map("chapters_count")
+  examsCount    Int      @default(0) @map("exams_count")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, version])
+  @@index([courseId, version])
+  @@map("course_content_package")
+}
+
+model CatalogTombstone {
+  id               String   @id @default(uuid()) @db.Uuid
+  entityType       String   @map("entity_type")
+  entityId         String   @map("entity_id")
+  deletedAtVersion Int      @map("deleted_at_version")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@index([deletedAtVersion])
+  @@map("catalog_tombstone")
+}
