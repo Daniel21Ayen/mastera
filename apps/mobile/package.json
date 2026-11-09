@@ -1,0 +1,42 @@
+{
+  "name": "@mastera/mobile",
+  "version": "3.4.0",
+  "private": true,
+  "main": "index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "react-native": "./index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "build": "tsc -p tsconfig.json && (mkdir -p dist && cp -r src/assets dist/assets 2>/dev/null || true)",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test dist/**/*.test.js"
+  },
+  "dependencies": {
+    "@mastera/contracts": "*",
+    "@mastera/domain": "*",
+    "@mastera/ui-tokens": "*",
+    "expo": "~58.0.23",
+    "expo-file-system": "~58.0.13",
+    "expo-network": "~58.0.4",
+    "expo-notifications": "~58.1.8",
+    "expo-screen-capture": "~58.0.6",
+    "expo-secure-store": "~58.0.2",
+    "expo-sqlite": "~58.0.15",
+    "react": "19.3.0",
+    "react-native": "0.88.1",
+    "react-native-svg": "15.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/react": "^19.0.0",
+    "typescript": "^5.4.0"
+  }
+}
