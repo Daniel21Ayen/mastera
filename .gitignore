@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.next/
+.expo/
+.turbo/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.env
+.env*.local
+.env.production
+.DS_Store
+*.tsbuildinfo
