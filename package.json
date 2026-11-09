@@ -1,0 +1,26 @@
+{
+  "name": "mastera-monorepo",
+  "version": "3.4.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build:packages": "npm run build --workspace=@mastera/ui-tokens && npm run build --workspace=@mastera/contracts && npm run build --workspace=@mastera/domain",
+    "build": "npm run build:packages && npm run build --workspace=@mastera/api && npm run build --workspace=@mastera/mobile && npm run build --workspace=@mastera/admin",
+    "postinstall": "node scripts/patch-expo-streams.js",
+    "test": "npm run test --workspaces --if-present",
+    "verify:no-hex": "npx tsx scripts/verify-no-hardcoded-hex.ts",
+    "verify:no-mocks": "npx tsx scripts/verify-no-mocks.ts",
+    "verify:release-gates": "npx tsx scripts/verify-release-gates.ts",
+    "ci:gates": "npm run build && npm run verify:no-hex && npm run verify:no-mocks && npm run verify:release-gates && npm run test"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "eslint": "^8.57.0",
+    "prettier": "^3.2.5",
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.0"
+  }
+}
