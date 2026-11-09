@@ -1,0 +1,15 @@
+{
+  "name": "@mastera/contracts",
+  "version": "3.4.0",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@mastera/ui-tokens": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}
