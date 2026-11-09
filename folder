@@ -1,0 +1,285 @@
+mastara/
+├── .github/
+│   └── workflows/
+│       ├── ci-test-and-lint.yml          # Unit, integration, no-mock & no-hex checks
+│       ├── mobile-size-gate.yml          # Enforces < 20 MB arm64 AAB download gate
+│       └── secret-scan.yml               # Blocks committed secrets or credentials
+├── apps/
+│   ├── api/                              # NestJS REST API + Prisma + PostgreSQL + S3
+│   ├── admin/                            # Next.js Admin Portal (Super/Academic/Ops)
+│   └── mobile/                           # Expo React Native Student App (Offline-first SQLite)
+├── packages/
+│   ├── contracts/                        # @mastara/contracts: Shared DTOs, schemas & error codes
+│   ├── domain/                           # @mastara/domain: Pure eligibility, pricing & access rules
+│   ├── ui-tokens/                        # @mastara/ui-tokens: Single colour, font & spacing source
+│   └── config/                           # Shared TypeScript, ESLint & Prettier rules
+├── scripts/
+│   ├── build-catalog-seed.ts             # Generates <= 150 KB compressed seed for mobile
+│   ├── verify-no-mocks.ts                # Fails CI if production bundles import mock paths
+│   └── verify-no-hardcoded-hex.ts        # Enforces packages/ui-tokens usage across apps
+├── docker-compose.yml                    # Local PostgreSQL, Redis & MinIO (S3-compatible)
+├── package.json                          # npm workspaces root configuration
+└── tsconfig.base.json                    # Strict shared TypeScript path aliases
+
+
+
+
+packages/
+├── domain/                               # @mastara/domain (Pure TypeScript, zero I/O)
+│   ├── src/
+│   │   ├── access/
+│   │   │   ├── can-open.ts               # Authoritative 5-step canOpen(student, item)
+│   │   │   ├── resolve-content-access.ts # Evaluates permission + online stream vs offline file
+│   │   │   └── __tests__/
+│   │   ├── commerce/
+│   │   │   ├── bundle-validator.ts       # validateBundleSelection (min/max, scope, dedup)
+│   │   │   ├── bundle-pricing.ts         # calculateBundlePrice (CALCULATED vs FIXED mode)
+│   │   │   ├── extra-course-pricing.ts   # calculateExtraCoursePrice (ordinal tier schedule)
+│   │   │   ├── single-eligibility.ts     # canPurchaseSingleCourse (requires active bundle)
+│   │   │   └── __tests__/
+│   │   ├── entitlement/
+│   │   │   ├── token-verifier.ts         # Offline server-signed token & expiry validation
+│   │   │   ├── clock-rollback.ts         # Compares device clock against last-seen server time
+│   │   │   └── __tests__/
+│   │   ├── registration/
+│   │   │   ├── claim-secret.ts           # hashClaimSecret (SHA-256) & constant-time verify
+│   │   │   ├── ms-code-formatter.ts      # Formats counter integer to MS0001..MS10000+
+│   │   │   └── __tests__/
+│   │   ├── sync/
+│   │   │   ├── conflict-resolver.ts      # Implements v3.1 conflict matrix (last change wins)
+│   │   │   └── version-comparator.ts     # Detects content_version updates
+│   │   └── index.ts
+│   └── package.json
+│
+├── contracts/                            # @mastara/contracts (Shared DTOs, Enums & Errors)
+│   ├── src/
+│   │   ├── auth/                         # Admin sign-in, 2FA TOTP, student login & OTP DTOs
+│   │   ├── catalog/                      # Snapshot DTOs, University, Program, Course, Chapter
+│   │   ├── commerce/                     # PaymentSettingsDto, PriceQuoteDto, SubmitOrderWithLocalDto
+│   │   ├── claim/                        # ClaimOrderDto, ClaimOrderResponseDto
+│   │   ├── content/                      # Material, QuizSet, ExamSet, Question & CSV import DTOs
+│   │   ├── pagination/                   # PaginatedRequestDto & PaginatedResponseDto
+│   │   ├── refunds/                      # RefundRequestDto, RefundState enum
+│   │   ├── errors/                       # Authoritative error code constants (BUNDLE_SIZE_INVALID, etc.)
+│   │   └── index.ts
+│   └── package.json
+│
+└── ui-tokens/                            # @mastara/ui-tokens (Design System Source of Truth)
+    ├── src/
+    │   ├── mobile-palette.ts             # 4-colour student design (Royal Blue, Navy Ink, White, Amber)
+    │   ├── admin-palette.ts              # Semantic tokens (success, warning, danger, neutral, primary)
+    │   ├── course-accents.ts             # 8 course accents + deterministic ID fallback
+    │   ├── status-tones.ts               # Shared badge & status mappings (Published, Pending, Locked)
+    │   ├── typography-spacing.ts         # Shared type scale, border radii & spacing units
+    │   └── index.ts
+    └── package.json
+
+
+    apps/api/
+├── prisma/
+│   ├── schema.prisma                     # All 14 entities (admin_user, counters, student, order, etc.)
+│   ├── migrations/                       # Transactional SQL migrations
+│   └── seed.ts                           # Production-safe initial configuration & super-admin seed
+├── src/
+│   ├── common/
+│   │   ├── decorators/                   # @Roles(), @RequirePermission(), @ScopeCheck(), @CurrentUser()
+│   │   ├── filters/                      # Global exception filter mapping domain errors to HTTP codes
+│   │   ├── guards/                       # JwtAuthGuard, PermissionsGuard, ScopeGuard, Totp2faGuard
+│   │   ├── interceptors/                 # AuditLogInterceptor, PaginationInterceptor
+│   │   └── pipes/                        # Strict DTO validation & sanitization pipes
+│   ├── config/
+│   │   └── env.validation.ts             # Refuses startup if JWT secret < 32 chars or config missing
+│   ├── modules/
+│   │   ├── permissions/                  # PermissionsModule: Role matrix & university/program/course scope
+│   │   ├── admin-iam/                    # Super/Academic/Ops admin CRUD, TOTP 2FA, last-Super-Admin guard
+│   │   ├── student-auth/                 # Registered student login, device lock check, OTP password reset
+│   │   ├── counter/                      # CounterModule: Atomic row locks for MS0001+ & question numbers
+│   │   ├── catalog-snapshot/             # CatalogSnapshotModule: ETag/gzip GET /catalog/snapshot
+│   │   ├── academic-catalog/             # Universities, Programs, Semesters & Courses CRUD
+│   │   ├── content/                      # Modules, Notes, Amharic Notes, Maker-Checker & version bump
+│   │   ├── assessments/                  # Quiz 1-3, Mid/Final/Mock, COC sets & per-set question numbering
+│   │   ├── csv-import/                   # Bulk question CSV validator (%PDF/PK block, UTF-8/BOM, dry-run)
+│   │   ├── scan-to-pdf/                  # Multi-image upload, reorder/crop processing & PDF publishing
+│   │   ├── commerce-pricing/             # Bundle rules, Calculated/Fixed modes, ordinal tiers & quotes
+│   │   ├── orders-payments/              # Order submission, receipt EXIF/MIME check, atomic approval & claim
+│   │   ├── entitlements/                 # Signed offline token issuer, expiry cron, manual access grants
+│   │   ├── refunds/                      # RefundModule: Request -> Approve/Reject -> Paid Out -> Revoke
+│   │   ├── students-directory/           # Paid-only student directory, profile view & device release
+│   │   ├── support-comms/                # Student support tickets, quick replies & scoped announcements
+│   │   ├── sync/                         # Upward sync receiver for registered student progress & attempts
+│   │   └── audit-reports/                # Immutable audit trail & Academic/Operational report generators
+│   ├── infrastructure/
+│   │   ├── database/                     # PrismaService with transaction helpers
+│   │   ├── storage/                      # Private S3/MinIO service with short-lived signed URLs
+│   │   ├── cache/                        # Redis rate-limiting & quote caching
+│   │   └── push/                         # Expo Push notification dispatcher (approval & expiry alerts)
+│   ├── app.module.ts
+│   └── main.ts
+└── test/
+    ├── concurrency/                      # 50-thread gapless MS counter & question number tests
+    ├── security/                         # RBAC matrix, scope isolation & claim-secret brute-force tests
+    └── e2e/                              # Full offline-to-bundle-approval-to-claim lifecycle tests
+
+
+    apps/mobile/
+├── assets/
+│   ├── seed/
+│   │   └── catalog-seed.json.gz          # Bundled <= 150 KB seed for instant offline first launch
+│   ├── fonts/                            # Latin, Ethiopic (Amharic) & KaTeX math fonts
+│   └── icons/                            # Single unified icon family
+├── src/
+│   ├── app/                              # Expo Router navigation tree
+│   │   ├── (auth)/
+│   │   │   ├── login.tsx                 # Offline sign-in + state-aware Forgot Password sheet (DR-06)
+│   │   │   ├── register.tsx              # Local-only UUID registration (zero network calls)
+│   │   │   ├── complete-profile.tsx      # Step 2 of 3: University, Program, Semester, Stream (DR-09)
+│   │   │   └── select-courses.tsx        # Step 3 of 3: Initial My Course List selection
+│   │   ├── (tabs)/
+│   │   │   ├── _layout.tsx               # Bottom navigation: Home, Course, Progress, Profile
+│   │   │   ├── home/
+│   │   │   │   ├── index.tsx             # 5-card Home map + adaptive Local/Pending/Offline states
+│   │   │   │   ├── payment-alerts.tsx    # All, Orders & Expiry alerts screen
+│   │   │   │   └── store-status.tsx      # Active bundle ring, days left, extra courses & renewal
+│   │   │   ├── courses/
+│   │   │   │   ├── index.tsx             # My Courses (All, Ongoing, Completed tabs + search)
+│   │   │   │   └── [courseId]/
+│   │   │   │       ├── _layout.tsx       # Top course tabs: Material | Tests | Exams
+│   │   │   │       ├── material.tsx      # Sub-tabs: Modules | Notes | Amharic -> Books -> Chapters
+│   │   │   │       ├── tests.tsx         # Sub-tabs: Quiz 1 | Quiz 2 | Quiz 3 -> Books -> Chapters
+│   │   │   │       └── exams.tsx         # Sub-tabs: Mid | Final | Mock -> Direct exam set list
+│   │   │   ├── progress/
+│   │   │   │   └── index.tsx             # Mastery ring, completed chapters, quiz average & offline count
+│   │   │   └── profile/
+│   │   │       ├── index.tsx             # Account badge, MS ID/local notice, scope, language & theme
+│   │   │       ├── downloads.tsx         # Download Manager (Wi-Fi only toggle, storage used, DWN-08/09)
+│   │   │       └── device-management.tsx # Self-service device release & Device Locked screen (DR-14)
+│   │   ├── coc/
+│   │   │   ├── index.tsx                 # Standalone COC Exam (Practice vs Timed exam tabs)
+│   │   │   ├── [setId]/runner.tsx        # Timed COC runner with question palette grid
+│   │   │   └── [setId]/result.tsx        # Score ring, state-aware sync label (DR-07) & Review link
+│   │   ├── reader/
+│   │   │   └── [chapterId].tsx           # Scroll-first reader, shared math renderer & Next/Take Quiz bar
+│   │   ├── assessment/
+│   │   │   ├── quiz/[chapterId].tsx      # Step-by-step practice quiz with instant explanation
+│   │   │   ├── exam/[examSetId].tsx      # University Mid/Final/Mock timed exam runner
+│   │   │   └── review/[attemptId].tsx    # Review Answers screen with Show explanation / Hide all
+│   │   └── store/
+│   │       ├── bundles.tsx               # Semester, Batch & Full Freshman selector with live min/max
+│   │       ├── extras.tsx                # Extra single courses with ordinal tier breakdown
+│   │       └── checkout.tsx              # Bank/Telebirr copy list, password re-entry & <300KB receipt upload
+│   ├── core/
+│   │   ├── database/
+│   │   │   ├── sqlite-client.ts          # Encrypted SQLite initialization & in-memory splash preload
+│   │   │   ├── migrations/               # Local SQLite schema migrations
+│   │   │   ├── seed-loader.ts            # Hydrates SQLite from bundled seed on first launch
+│   │   │   ├── claim-migrator.ts         # Atomic localAccountId -> MS studentCode migration (REG-12)
+│   │   │   └── repositories/             # CatalogRepo, ProgressRepo, AttemptRepo, OutboxRepo
+│   │   ├── security/
+│   │   │   ├── local-password-hash.ts    # Salted iterated hash, constant-time check & lockout timer
+│   │   │   ├── secure-vault.ts           # Expo SecureStore wrapper for claimSecret & entitlement token
+│   │   │   ├── file-crypto.ts            # Device-bound AES encryption/decryption for downloaded items
+│   │   │   └── screen-guard.ts           # Global screenshot & screen-recording blocker (D9)
+│   │   ├── sync/
+│   │   │   ├── sync-engine.ts            # Event triggers (profile save, foreground, reconnect, pull)
+│   │   │   ├── backoff-scheduler.ts      # Exponential backoff with jitter (no fixed-interval polling)
+│   │   │   ├── catalog-sync.ts           # Delta snapshot sync & atomic content_version replacement
+│   │   │   ├── claim-poller.ts           # Polls pending order & executes POST /orders/:id/claim
+│   │   │   └── outbox-flusher.ts         # Flushes progress & attempts only when REGISTERED_REMOTE
+│   │   └── downloads/
+│   │       ├── download-manager.ts       # Resumable course/chapter downloads, atomic swap & delete
+│   │       └── memory-streamer.ts        # Holds online streamed content in RAM only (zero disk write)
+│   └── shared/
+│       ├── components/
+│       │   ├── LockedContentSheet.tsx    # Single paywall sheet across Material, Tests, Exams & COC
+│       │   ├── AccessBadge.tsx           # Two-part badge (Free/Locked/Downloaded/Included + action chip)
+│       │   ├── MathBlock.tsx             # Single shared KaTeX renderer (< 120 MB RAM target, NFR-18)
+│       │   └── OfflineBanner.tsx         # Non-blocking connectivity & expiring entitlement banner
+│       ├── hooks/                        # useCanOpen, useEntitlementStatus, useNetworkTrigger
+│       └── i18n/                         # English & Amharic UI strings (UI-SET-01)
+└── package.json
+
+
+
+apps/admin/
+├── src/
+│   ├── app/
+│   │   ├── (auth)/
+│   │   │   ├── login/page.tsx            # Admin login with mandatory TOTP 2FA for Super & Ops Admins
+│   │   │   └── forbidden/page.tsx        # 403 page for out-of-role or out-of-scope routes
+│   │   └── (dashboard)/
+│   │       ├── layout.tsx                # Dark navy sidebar, global search, role badge & theme toggle
+│   │       ├── dashboard/page.tsx        # KPIs, New students chart, Needs attention & Recent activity
+│   │       ├── students/
+│   │       │   ├── page.tsx              # Paid-only directory (MS0001 first, CSV export, Print list)
+│   │       │   └── [studentId]/page.tsx  # Profile, Device Revoke, My Course List & Grant/Extend Access
+│   │       ├── catalog/
+│   │       │   ├── courses/page.tsx      # Courses table + Add/Edit modal (accent, icon, free trial count)
+│   │       │   ├── universities/page.tsx # Universities table + Add/Edit modal (short name, status)
+│   │       │   └── programs/page.tsx     # Programs/Departments table + Add/Edit modal
+│   │       ├── content/
+│   │       │   ├── modules/page.tsx      # Material Management list (Modules, Note, Amharic Notes tabs)
+│   │       │   ├── material/studio/      # Chapter authoring studio, LaTeX editor, PDF attach & Preview
+│   │       │   └── tests/
+│   │       │       ├── [quizTab]/page.tsx     # Quiz 1, Quiz 2, Quiz 3 management & Build Test Set modal
+│   │       │       └── [quizTab]/new/page.tsx # Create Question (MCQ, T/F, Short Answer, Blank Space)
+│   │       ├── scan-to-pdf/
+│   │       │   └── page.tsx              # 4-step wizard: 1 Import -> 2 Order/Edit -> 3 Convert -> 4 Publish
+│   │       ├── questions/
+│   │       │   ├── [examType]/page.tsx        # Mid, Final, Mock & COC sets, Build Set & Bulk CSV Import
+│   │       │   └── [examType]/new/page.tsx    # Exam Question builder with LaTeX & Accepted Answers
+│   │       ├── commerce/
+│   │       │   ├── payments/
+│   │       │   │   ├── page.tsx               # Pending, Approved, Rejected & Refunds tabs
+│   │       │   │   └── [orderId]/page.tsx     # Split-pane Digital Slip viewer (zoom/rotate) & Approve/Reject
+│   │       │   └── pricing/page.tsx           # Revenue counter, Bundle cards, Extra tiers & Bank credentials
+│   │       ├── support/page.tsx          # Split-pane ticket inbox, student card & Quick Replies
+│   │       ├── announcements/page.tsx    # Course-scoped & system-wide notices
+│   │       ├── reports/page.tsx          # Role-filtered Academic & Operational reports
+│   │       ├── audit-log/page.tsx        # Paginated audit trail with actor role, scope & diff
+│   │       └── admins/page.tsx           # Super Admin only: Admins & Roles KPIs, 2FA & scope assignment
+│   ├── components/
+│   │   ├── shared/
+│   │   │   ├── PaginatedTable.tsx        # Standard table (URL page state, filter reset, empty-page step-back)
+│   │   │   ├── StudentSimulatorModal.tsx # "Review as student" Desktop/Mobile simulation modal
+│   │   │   ├── BulkCsvImportModal.tsx    # CSV dry-run uploader, template download & error report
+│   │   │   ├── AuthoringActionBar.tsx    # Bottom bar: Add, Reset, Save Draft, Submit Review, Publish
+│   │   │   └── LatexInputHelper.tsx      # Inline $...$ formula helper & live KaTeX preview
+│   │   └── guards/
+│   │       └── RoleScopeGate.tsx         # Hides unauthorized sidebar items & buttons per 4.2 matrix
+│   └── lib/
+│       ├── api-client.ts                 # Fails fast at startup if NEXT_PUBLIC_API_URL is missing
+│       └── auth-session.ts               # HttpOnly, Secure, SameSite cookie session + CSRF header
+└── package.json
+
+
+to do this make real api  with no hard codded ,with no maock data,instead from database through ientering seed data to database and all all dropdawn data should come from data base  for example to add spesific courses  modules,notes,amharic notes ,quiz 1-3,mid exam,final eaxm,mock exam that course must be exist and display on course page list 
+
+
+
+
+
+
+
+
+
+
+docker compose up -d
+
+
+cd apps/api
+npm run build
+node dist/main.js
+
+cd apps/admin
+npm run dev
+
+cd apps/mobile
+npx expo start
+
+npm run ci:gates
+
+
+
+Super Admin	            admin@mastara.demo	    MasteraAdmin@2026!	     Full system access (pricing, publish, approve payments, IAM, roles)
+Academic Coordinator	academic@mastara.demo	MasteraAcademic@2026!	 Author courses, modules, chapters, quizzes, and exam sets
+Operations Admin	    ops@mastara.demo	    MasteraOps@2026!	     Review student payments, release hardware bindings, support tickets
