@@ -62,6 +62,11 @@ async function bootstrap() {
     credentials: true,
   });
 
+  app.use((req: any, _res: any, next: any) => {
+    console.log(`[HTTP REQ] ${req.method} ${req.url} (from ${req.ip})`);
+    next();
+  });
+
   await app.listen(envConfig.port, '0.0.0.0');
   console.log(`[Mastera API] Running on http://localhost:${envConfig.port}`);
 }
