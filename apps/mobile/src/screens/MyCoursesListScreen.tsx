@@ -148,6 +148,14 @@ export function MyCoursesListScreen({
 
           {/* Courses checkbox list */}
           <View style={styles.courseList}>
+            {filteredForPicker.length === 0 && (
+              <View style={{ paddingVertical: 32, alignItems: 'center' }}>
+                <MasteraIcon name="refresh-cw" size={20} color={tokens.primary} />
+                <Text style={{ marginTop: 10, color: tokens.textMuted, fontSize: 13 }}>
+                  Syncing courses from database...
+                </Text>
+              </View>
+            )}
             {filteredForPicker.map(({ item }) => {
               const checked = draftCheckedIds.has(item.id);
               return (
@@ -324,6 +332,14 @@ export function MyCoursesListScreen({
 
         {/* Course Cards matching preview (4).webp Screen 4 */}
         <View style={styles.courseList}>
+          {filteredCourses.length === 0 && (
+            <View style={{ paddingVertical: 32, alignItems: 'center' }}>
+              <MasteraIcon name="refresh-cw" size={20} color={tokens.primary} />
+              <Text style={{ marginTop: 10, color: tokens.textMuted, fontSize: 13 }}>
+                Syncing courses from database...
+              </Text>
+            </View>
+          )}
           {filteredCourses.map((courseRow) => {
             const { item, accessBadge } = courseRow;
             const isIncluded = accessBadge === 'Included';
