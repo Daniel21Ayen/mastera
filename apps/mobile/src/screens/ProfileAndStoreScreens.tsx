@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -126,6 +126,17 @@ export function ProfileAndStoreScreens({
   const [selectedProviderId, setSelectedProviderId] = useState<string>(
     paymentMethods[0]?.id ?? 'pm-cbe-mobile'
   );
+
+  // Keep selected provider aligned with available payment methods
+  useEffect(() => {
+    if (
+      paymentMethods.length > 0 &&
+      !paymentMethods.some((p) => p.id === selectedProviderId)
+    ) {
+      setSelectedProviderId(paymentMethods[0]!.id);
+    }
+  }, [paymentMethods, selectedProviderId]);
+
   const [txRef, setTxRef] = useState('FT26302MAC789');
 
   // Account Setup Form state (Offline registration pre-submit)
