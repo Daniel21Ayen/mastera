@@ -418,7 +418,19 @@ export class CommercePricingService {
       throw new Error('Validation Error: renewalWindowDays and quoteExpiryMinutes must be >= 1.');
     }
 
-    for (const bundle of Object.values(cfg.bundles)) {
+    if (cfg.bundles) {
+      for (const [key, bundle] of Object.entries(cfg.bundles)) {
+        if (!bundle) continue;
+        if (!bundle.productType) (bundle as any).productType = key;
+        if (typeof bundle.minCourses !== 'number') bundle.minCourses = 1;
+        if (typeof bundle.maxCourses !== 'number') bundle.maxCourses = Math.max(14, bundle.minCourses);
+        if (typeof bundle.discountPercent !== 'number') bundle.discountPercent = 0;
+        if (typeof bundle.fixedPriceETB !== 'number') bundle.fixedPriceETB = (bundle as any).priceETB ?? 0;
+        if (typeof bundle.durationDays !== 'number') bundle.durationDays = 120;
+      }
+    }
+
+    for (const bundle of Object.values(cfg.bundles || {})) {
       if (bundle.minCourses < 1 || bundle.maxCourses < bundle.minCourses) {
         throw new Error(
           `Validation Error (${bundle.productType}): minCourses must be >= 1 and maxCourses >= minCourses.`
@@ -434,6 +446,35 @@ export class CommercePricingService {
           `Validation Error (${bundle.productType}): prices must be non-negative and durationDays positive.`
         );
       }
+    }
+
+    // Normalize extraCourseTiers if coming in as { ordinal, priceETB }
+    const rawTiers = Array.isArray(cfg.extraCourseTiers) ? cfg.extraCourseTiers : [];
+    const normalizedTiers = rawTiers.map((t: any, idx: number, arr: any[]) => {
+      if (typeof t.fromOrdinal === 'number') {
+        return {
+          fromOrdinal: t.fromOrdinal,
+          toOrdinal: t.toOrdinal ?? null,
+          unitPriceETB: t.unitPriceETB ?? t.priceETB ?? 0,
+        };
+      }
+      const ord = typeof t.ordinal === 'number' ? t.ordinal : idx + 1;
+      const isLast = idx === arr.length - 1;
+      return {
+        fromOrdinal: ord,
+        toOrdinal: isLast ? null : ord,
+        unitPriceETB: t.unitPriceETB ?? t.priceETB ?? 0,
+      };
+    });
+
+    if (normalizedTiers.length === 0) {
+      cfg.extraCourseTiers = [
+        { fromOrdinal: 1, toOrdinal: 1, unitPriceETB: 60 },
+        { fromOrdinal: 2, toOrdinal: 3, unitPriceETB: 55 },
+        { fromOrdinal: 4, toOrdinal: null, unitPriceETB: 50 },
+      ];
+    } else {
+      cfg.extraCourseTiers = normalizedTiers;
     }
 
     // Validate extraCourseTiers are contiguous, non-overlapping, starting at 1 (Section 6.2)
