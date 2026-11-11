@@ -336,21 +336,58 @@ export function unpackPackageIntoState(
 /**
  * Candidate backend API endpoints for live dynamic content syncing.
  * Detects Metro host IP dynamically from React Native runtime, falling back to machine Wi-Fi host IP.
+ * Includes both port 3000 (direct NestJS API) and port 8081 (Metro API proxy) to guarantee connectivity.
  */
 export function getCandidateHosts(): string[] {
   const hosts: string[] = [];
+
+  const addHostPair = (ip: string) => {
+    if (ip && ip !== 'localhost' && ip !== '127.0.0.1') {
+      hosts.push(`http://${ip}:53317`); // UFW firewall pre-whitelisted port
+      hosts.push(`http://${ip}:3000`);
+      hosts.push(`http://${ip}:8081`); // Metro proxy fallback
+    }
+  };
+
+  // 1. Detect Metro Host dynamically from Expo Constants
   try {
-    const { NativeModules } = require('react-native');
-    const scriptURL = NativeModules?.SourceCode?.scriptURL as string | undefined;
-    const metroIp = scriptURL?.split('://')[1]?.split('/')[0]?.split(':')[0];
-    if (metroIp && metroIp !== 'localhost' && metroIp !== '127.0.0.1') {
-      hosts.push(`http://${metroIp}:3000`);
+    const Constants =
+      require('expo-constants')?.default || require('expo-constants');
+    const hostUri =
+      Constants?.expoConfig?.hostUri ||
+      Constants?.manifest2?.extra?.expoClient?.hostUri ||
+      Constants?.manifest?.debuggerHost ||
+      Constants?.experienceUrl;
+    if (hostUri && typeof hostUri === 'string') {
+      const cleanIp = hostUri
+        .replace(/^[a-zA-Z]+:\/\//, '')
+        .split('/')[0]
+        ?.split(':')[0];
+      if (cleanIp) addHostPair(cleanIp);
     }
   } catch {}
 
-  hosts.push('http://172.16.131.91:3000');
+  // 2. Detect Metro host from SourceCode module
+  try {
+    const { NativeModules } = require('react-native');
+    const scriptURL = NativeModules?.SourceCode?.scriptURL as string | undefined;
+    if (scriptURL) {
+      const cleanIp = scriptURL
+        .replace(/^[a-zA-Z]+:\/\//, '')
+        .split('/')[0]
+        ?.split(':')[0];
+      if (cleanIp) addHostPair(cleanIp);
+    }
+  } catch {}
+
+  // 3. Known machine local IPs and development fallbacks
+  addHostPair('172.16.131.134');
+  addHostPair('172.16.132.37');
+  addHostPair('172.16.131.91');
   hosts.push('http://localhost:3000');
+  hosts.push('http://localhost:8081');
   hosts.push('http://10.0.2.2:3000');
+  hosts.push('http://10.0.2.2:8081');
   return [...new Set(hosts)];
 }
 
@@ -363,7 +400,7 @@ export async function syncLiveCatalogFromApi(): Promise<RealAppDataState | null>
   for (const host of candidateHosts) {
     try {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 6000);
+      const timer = setTimeout(() => controller.abort(), 3500);
 
       const snapRes = await fetch(`${host}/catalog/snapshot`, {
         signal: controller.signal,
@@ -374,10 +411,14 @@ export async function syncLiveCatalogFromApi(): Promise<RealAppDataState | null>
 
       if (snapRes.ok) {
         const liveSnapshot = (await snapRes.json()) as CatalogSnapshotResponseDto;
+        console.log(
+          `[LiveCatalog] Successfully fetched snapshot from ${host} (${liveSnapshot.courses?.length ?? 0} courses, ${liveSnapshot.bookGroups?.length ?? 0} books)`
+        );
+
         let liveQuestions: any[] = [];
         try {
           const qController = new AbortController();
-          const qTimer = setTimeout(() => qController.abort(), 3000);
+          const qTimer = setTimeout(() => qController.abort(), 2000);
           const qRes = await fetch(`${host}/assessments/questions`, {
             signal: qController.signal,
             headers: { Accept: 'application/json' },
@@ -415,7 +456,7 @@ export async function syncCatalogDeltaFromApi(
   for (const host of candidateHosts) {
     try {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 6000);
+      const timer = setTimeout(() => controller.abort(), 2000);
 
       const headers: Record<string, string> = { Accept: 'application/json' };
       if (currentEtag) headers['if-none-match'] = currentEtag;
@@ -441,6 +482,39 @@ export async function syncCatalogDeltaFromApi(
       }
     } catch {
       // Offline fallback
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Fetches latest active payment methods directly from backend commerce endpoint.
+ */
+export async function fetchLivePaymentMethods(): Promise<PaymentMethodEntryDto[] | null> {
+  const candidateHosts = getCandidateHosts();
+
+  for (const host of candidateHosts) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 4000);
+
+      const res = await fetch(`${host}/commerce/payment-methods`, {
+        signal: controller.signal,
+        headers: { Accept: 'application/json' },
+      });
+
+      clearTimeout(timer);
+
+      if (res.ok) {
+        const methods = (await res.json()) as PaymentMethodEntryDto[];
+        if (Array.isArray(methods) && methods.length > 0) {
+          console.log(`[LiveCatalog] Successfully fetched ${methods.length} payment methods from ${host}`);
+          return methods;
+        }
+      }
+    } catch {
+      // Continue trying candidate hosts
     }
   }
 
