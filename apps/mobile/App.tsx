@@ -50,6 +50,7 @@ import {
   mergeDeltaIntoState,
   unpackPackageIntoState,
   fetchCoursePackageFromApi,
+  fetchLivePaymentMethods,
   RealAppDataState,
 } from './src/core/data/live-catalog-provider';
 
@@ -68,16 +69,22 @@ export default function App(): any {
     'HOME' | 'COURSES' | 'PROGRESS' | 'PROFILE'
   >('HOME');
 
-  // Auto-sync real database content in background with delta sync fallback
+  // Continuous live database synchronization:
+  // Dynamically syncs universities, programs, courses, chapters, exams, and payment methods from PostgreSQL
   useEffect(() => {
     let isCancelled = false;
-    async function loadCatalog() {
+
+    async function syncFromDatabase() {
       try {
         const freshData = await syncLiveCatalogFromApi();
         if (!isCancelled && freshData && freshData.courses.length > 0) {
           setAppData(freshData);
         } else {
-          const deltaRes = await syncCatalogDeltaFromApi(1);
+          const currentVersion = Math.max(
+            ...appData.courses.map((c) => c.version || 1),
+            1
+          );
+          const deltaRes = await syncCatalogDeltaFromApi(currentVersion);
           if (
             !isCancelled &&
             deltaRes &&
@@ -91,11 +98,37 @@ export default function App(): any {
         // Fallback to local offline cache
       }
     }
-    loadCatalog();
+
+    syncFromDatabase();
+
+    // Check for continuous database updates every 8 seconds
+    const interval = setInterval(syncFromDatabase, 8000);
+
+    return () => {
+      isCancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
+
+  // Synchronize payment methods dynamically whenever student accesses Profile/Store or on interval
+  useEffect(() => {
+    let isCancelled = false;
+    async function refreshPaymentMethods() {
+      try {
+        const methods = await fetchLivePaymentMethods();
+        if (!isCancelled && methods && methods.length > 0) {
+          setAppData((prev) => ({
+            ...prev,
+            paymentMethods: methods,
+          }));
+        }
+      } catch {}
+    }
+    refreshPaymentMethods();
     return () => {
       isCancelled = true;
     };
-  }, []);
+  }, [activeTab, profileInitialScreen]);
 
   // Academic scope state (University, Department, Semester, Stream)
   const [academicScope, setAcademicScope] = useState<AcademicScopeState>({
@@ -121,17 +154,15 @@ export default function App(): any {
       academicScope.programId === 'FRESHMAN' ||
       academicScope.programName.toLowerCase().includes('freshman')
     ) {
-      return appData.courses.filter((c) => {
-        const stream = (c as any).stream;
-        if (
-          stream &&
-          stream !== 'COMMON' &&
-          stream !== academicScope.stream.toUpperCase()
-        ) {
+      const targetStream = (academicScope.stream || 'NATURAL').toUpperCase();
+      const filtered = appData.courses.filter((c) => {
+        const stream = ((c as any).stream || '').toUpperCase();
+        if (stream && stream !== 'COMMON' && stream !== targetStream) {
           return false;
         }
         return true;
       });
+      return filtered.length > 0 ? filtered : appData.courses;
     }
     const matches = appData.courses.filter((c) => {
       const pName = ((c as any).programName || '').toLowerCase();
@@ -154,7 +185,10 @@ export default function App(): any {
   useEffect(() => {
     if (departmentScopedCourses.length > 0) {
       setSelectedCourseIds((prev) => {
-        if (prev.length === 0 || prev.some((id) => id.startsWith('c-'))) {
+        const hasValidEnrolledCourse = prev.some((id) =>
+          departmentScopedCourses.some((c) => c.id === id)
+        );
+        if (!hasValidEnrolledCourse) {
           return departmentScopedCourses.slice(0, 3).map((c) => c.id);
         }
         return prev;

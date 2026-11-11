@@ -264,7 +264,9 @@ to do this make real api  with no hard codded ,with no maock data,instead from d
 
 
 docker compose up -d
-
+cd apps/api
+npm run build
+node dist/main.js
 
 cd apps/api
 npm run build
