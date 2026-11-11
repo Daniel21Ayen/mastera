@@ -160,8 +160,8 @@ test('Acceptance #13 & #16 (DWN-01..09, R26): Memory streaming, Wi-Fi-only guard
 });
 
 test('Phase 4 & 5: Delta-Sync Ingestion, Package Unpacking into Volatile RAM, and Storage Summary', () => {
-  // 1. Initial state has default bundled courses
-  assert.ok(initialRealAppData.courses.length >= 3);
+  // 1. Initial state has default bundled universities shell
+  assert.ok(initialRealAppData.universities.length >= 3);
 
   // 2. Merge delta with a new course and a deleted course
   const deltaSnapshot = {
