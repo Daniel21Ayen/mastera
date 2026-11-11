@@ -747,9 +747,13 @@ export class PrismaCommercePricingRepository implements CommercePricingPort {
   }
 
   async saveSettings(nextSettings: PaymentSettingsDto): Promise<PaymentSettingsDto> {
+    const latest = await this.prisma.pricingConfig.findFirst({
+      orderBy: { configVersion: 'desc' },
+    });
+    const nextVersion = (latest?.configVersion ?? 0) + 1;
     await this.prisma.pricingConfig.create({
       data: {
-        configVersion: Date.now(),
+        configVersion: nextVersion,
         singleCoursesEnabled: nextSettings.singleCoursesEnabled,
         renewalWindowDays: nextSettings.renewalWindowDays,
         quoteExpiryMinutes: nextSettings.quoteExpiryMinutes,
@@ -763,7 +767,7 @@ export class PrismaCommercePricingRepository implements CommercePricingPort {
         changeReason: 'Admin update via API',
       },
     });
-    return nextSettings;
+    return { ...nextSettings, configVersion: nextVersion };
   }
 
   async findQuoteById(quoteId: string): Promise<PriceQuoteDto | null> {
