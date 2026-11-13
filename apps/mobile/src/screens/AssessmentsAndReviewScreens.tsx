@@ -31,6 +31,8 @@ import { MasteraIcon } from '../shared/components/MasteraIcon';
 
 export interface CourseTestsTabProps {
   courseTitle: string;
+  courseId?: string;
+  courseChapters?: CatalogChapterMetaDto[];
   quizBooks: ResolvedCatalogRowView<CatalogBookGroupDto>[];
   chaptersByBookId: Record<
     string,
@@ -50,6 +52,8 @@ export interface CourseTestsTabProps {
 
 export function CourseTestsQuizFlowScreen({
   courseTitle,
+  courseId,
+  courseChapters,
   quizBooks,
   chaptersByBookId,
   questionsByChapterId,
@@ -347,90 +351,25 @@ export function CourseTestsQuizFlowScreen({
       (b.item.title && b.item.title.toLowerCase().includes(activeQuizTab === 'QUIZ_1' ? 'quiz 1' : activeQuizTab === 'QUIZ_2' ? 'quiz 2' : 'quiz 3'))
   );
 
-  let chapterRows = activeBook ? (chaptersByBookId[activeBook.item.id] ?? []) : [];
+  let chapterRows: ResolvedCatalogRowView<CatalogChapterMetaDto>[] = [];
 
-  if (chapterRows.length === 0) {
-    for (const key of Object.keys(chaptersByBookId)) {
-      const list = chaptersByBookId[key] ?? [];
-      const matching = list.filter(
-        (row) =>
-          row.item.category === activeQuizTab ||
-          ((row.item as any).description &&
-            (row.item as any).description.includes(activeQuizTab))
-      );
-      if (matching.length > 0) {
-        chapterRows = matching;
-        break;
-      }
-    }
-  }
-
-  // Database fallback matching Ethiopian University Freshman curriculum
-  if (chapterRows.length === 0) {
-    const defaultPrefix =
-      activeQuizTab === 'QUIZ_1'
-        ? 'c0000001-0000-0000-0000-00000000000'
-        : activeQuizTab === 'QUIZ_2'
-        ? 'c0000002-0000-0000-0000-00000000000'
-        : 'c0000003-0000-0000-0000-00000000000';
-    chapterRows = [
-      {
-        item: {
-          id: `${defaultPrefix}1`,
-          orderIndex: 1,
-          title: 'Chapter 1: Fundamentals',
-          bookGroupId: activeBook?.item.id ?? '',
-          category: activeQuizTab,
-          version: 1,
-          isFree: true,
-        } as any,
+  if (activeBook && chaptersByBookId[activeBook.item.id]?.length) {
+    chapterRows = chaptersByBookId[activeBook.item.id] || [];
+  } else if (courseChapters) {
+    // Strict course isolation: only get chapters belonging to this course & active quiz category
+    chapterRows = courseChapters
+      .filter(
+        (ch) =>
+          (activeBook && ch.bookGroupId === activeBook.item.id) ||
+          (ch.courseId === (courseId || activeBook?.item.courseId) &&
+            ch.category === activeQuizTab)
+      )
+      .map((ch, idx) => ({
+        item: ch,
         canOpenNow: true,
-        accessBadge: 'Free',
+        accessBadge: ch.isFree ? 'Free' : idx === 3 ? 'Locked' : 'Included',
         updateAvailable: false,
-      },
-      {
-        item: {
-          id: `${defaultPrefix}2`,
-          orderIndex: 2,
-          title: 'Chapter 2: Core Methods',
-          bookGroupId: activeBook?.item.id ?? '',
-          category: activeQuizTab,
-          version: 1,
-          isFree: true,
-        } as any,
-        canOpenNow: true,
-        accessBadge: 'Free',
-        updateAvailable: false,
-      },
-      {
-        item: {
-          id: `${defaultPrefix}3`,
-          orderIndex: 3,
-          title: 'Chapter 3: Applications',
-          bookGroupId: activeBook?.item.id ?? '',
-          category: activeQuizTab,
-          version: 1,
-          isFree: true,
-        } as any,
-        canOpenNow: true,
-        accessBadge: 'Free',
-        updateAvailable: false,
-      },
-      {
-        item: {
-          id: `${defaultPrefix}4`,
-          orderIndex: 4,
-          title: 'Chapter 4: Synthesis & Review',
-          bookGroupId: activeBook?.item.id ?? '',
-          category: activeQuizTab,
-          version: 1,
-          isFree: true,
-        } as any,
-        canOpenNow: true,
-        accessBadge: 'Free',
-        updateAvailable: false,
-      },
-    ];
+      }));
   }
 
   return (
@@ -539,84 +478,96 @@ export function CourseTestsQuizFlowScreen({
 
       {/* Direct Quiz Chapters List matching user screenshot media_1794168593766_d12a6e63.png */}
       <View style={styles.quizChapterCardList}>
-        {chapterRows.map((row, idx) => {
-          const ch = (row as any).item || row;
-          const colonIdx = ch.title.indexOf(':');
-          const mainTitle =
-            colonIdx > -1
-              ? ch.title.substring(0, colonIdx).trim()
-              : `Chapter ${ch.orderIndex || idx + 1}`;
-          const subTitle =
-            colonIdx > -1
-              ? ch.title.substring(colonIdx + 1).trim()
-              : ch.title;
+        {chapterRows.length === 0 ? (
+          <View style={{ alignItems: 'center', justifyContent: 'center', padding: SPACING.xl, marginTop: 40 }}>
+            <MasteraIcon name="info" size={40} color={tokens.textMuted} />
+            <Text style={{ marginTop: 12, fontSize: 16, fontWeight: '600', color: tokens.textPrimary }}>
+              No {quizTabLabel} assessments published yet
+            </Text>
+            <Text style={{ marginTop: 4, fontSize: 13, color: tokens.textMuted, textAlign: 'center' }}>
+              Practice tests and quizzes for {courseTitle} will appear here when published in the curriculum.
+            </Text>
+          </View>
+        ) : (
+          chapterRows.map((row, idx) => {
+            const ch = (row as any).item || row;
+            const colonIdx = ch.title.indexOf(':');
+            const mainTitle =
+              colonIdx > -1
+                ? ch.title.substring(0, colonIdx).trim()
+                : `Chapter ${ch.orderIndex || idx + 1}`;
+            const subTitle =
+              colonIdx > -1
+                ? ch.title.substring(colonIdx + 1).trim()
+                : ch.title;
 
-          // Squircle book container colors matching screenshot:
-          // Chapter 1: Amber squircle
-          // Chapter 2: Green squircle
-          // Chapter 3: Purple squircle
-          // Chapter 4: Blue squircle
-          const squircleColors = [
-            COURSE_ACCENTS.amber,
-            tokens.success,
-            COURSE_ACCENTS.indigo,
-            tokens.primary,
-          ];
-          const squircleBg = squircleColors[idx % squircleColors.length];
+            // Squircle book container colors matching screenshot:
+            // Chapter 1: Amber squircle
+            // Chapter 2: Green squircle
+            // Chapter 3: Purple squircle
+            // Chapter 4: Blue squircle
+            const squircleColors = [
+              COURSE_ACCENTS.amber,
+              tokens.success,
+              COURSE_ACCENTS.indigo,
+              tokens.primary,
+            ];
+            const squircleBg = squircleColors[idx % squircleColors.length];
 
-          return (
-            <TouchableOpacity
-              key={ch.id || `quiz-ch-${idx}`}
-              onPress={() => {
-                setActiveChapter(ch);
-                setQuestionIndex(0);
-                setSelectedAnswers({});
-              }}
-              activeOpacity={0.7}
-              style={[
-                styles.quizChapterCard,
-                {
-                  backgroundColor: tokens.surface,
-                  borderColor: tokens.border,
-                },
-              ]}
-            >
-              <View
+            return (
+              <TouchableOpacity
+                key={ch.id || `quiz-ch-${idx}`}
+                onPress={() => {
+                  setActiveChapter(ch);
+                  setQuestionIndex(0);
+                  setSelectedAnswers({});
+                }}
+                activeOpacity={0.7}
                 style={[
-                  styles.squircleBookBox,
-                  { backgroundColor: squircleBg },
+                  styles.quizChapterCard,
+                  {
+                    backgroundColor: tokens.surface,
+                    borderColor: tokens.border,
+                  },
                 ]}
               >
-                <MasteraIcon name="book-open" size={24} color={tokens.white} />
-              </View>
-
-              <View style={styles.quizChapterTextCol}>
-                <Text
+                <View
                   style={[
-                    styles.quizChapterHeading,
-                    { color: tokens.textPrimary },
+                    styles.squircleBookBox,
+                    { backgroundColor: squircleBg },
                   ]}
                 >
-                  {mainTitle}
-                </Text>
-                <Text
-                  style={[
-                    styles.quizChapterSubheading,
-                    { color: tokens.textMuted },
-                  ]}
-                >
-                  {subTitle}
-                </Text>
-              </View>
+                  <MasteraIcon name="book-open" size={24} color={tokens.white} />
+                </View>
 
-              <MasteraIcon
-                name="chevron-right"
-                size={22}
-                color={tokens.primary}
-              />
-            </TouchableOpacity>
-          );
-        })}
+                <View style={styles.quizChapterTextCol}>
+                  <Text
+                    style={[
+                      styles.quizChapterHeading,
+                      { color: tokens.textPrimary },
+                    ]}
+                  >
+                    {mainTitle}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.quizChapterSubheading,
+                      { color: tokens.textMuted },
+                    ]}
+                  >
+                    {subTitle}
+                  </Text>
+                </View>
+
+                <MasteraIcon
+                  name="chevron-right"
+                  size={22}
+                  color={tokens.primary}
+                />
+              </TouchableOpacity>
+            );
+          })
+        )}
       </View>
     </ScrollView>
   );
@@ -628,6 +579,7 @@ export function CourseTestsQuizFlowScreen({
 
 export interface CourseExamsTabFlowProps {
   courseTitle: string;
+  courseId?: string;
   examSets: ResolvedCatalogRowView<CatalogExamSetMetaDto>[];
   questionsByExamSetId: Record<string, QuestionItemDto[]>;
   accountState: StudentAccountState;
@@ -643,6 +595,7 @@ export interface CourseExamsTabFlowProps {
 
 export function CourseExamsDirectFlowScreen({
   courseTitle,
+  courseId,
   examSets,
   questionsByExamSetId,
   accountState,
@@ -696,68 +649,12 @@ export function CourseExamsDirectFlowScreen({
     ? 'English'
     : courseTitle;
 
-  // Real fallback questions matching English curriculum if DB questions are pending
+  // Specific exam questions retrieval from database or catalog provider
   const getQuestionsForExamSet = (es: CatalogExamSetMetaDto): QuestionItemDto[] => {
     const found = questionsByExamSetId[es.id];
     if (found && found.length > 0) return found;
 
-    return [
-      {
-        id: `q-${es.id}-1`,
-        displayNumber: 1,
-        questionType: 'MULTIPLE_CHOICE',
-        promptLatex: 'Which word is a noun?',
-        options: [
-          { id: 'A', textLatex: 'quickly' },
-          { id: 'B', textLatex: 'happiness' },
-          { id: 'C', textLatex: 'run' },
-        ],
-        correctOptionId: 'B',
-        explanationLatex:
-          'Happiness is an abstract noun, quickly is an adverb, and run is an action verb.',
-      },
-      {
-        id: `q-${es.id}-2`,
-        displayNumber: 2,
-        questionType: 'MULTIPLE_CHOICE',
-        promptLatex:
-          'Identify the sentence displaying proper subject-verb agreement with collective nouns.',
-        options: [
-          {
-            id: 'A',
-            textLatex:
-              'The committee have made their final decision yesterday.',
-          },
-          {
-            id: 'B',
-            textLatex:
-              'The committee has reached consensus on the new academic calendar.',
-          },
-          {
-            id: 'C',
-            textLatex: 'The committee are unanimous in its vote.',
-          },
-        ],
-        correctOptionId: 'B',
-        explanationLatex:
-          'When acting as a singular unified entity, collective nouns take singular verbs: "The committee has reached consensus".',
-      },
-      {
-        id: `q-${es.id}-3`,
-        displayNumber: 3,
-        questionType: 'MULTIPLE_CHOICE',
-        promptLatex:
-          'What rhetorical pattern is most appropriate for discussing similarities and differences between two research paradigms?',
-        options: [
-          { id: 'A', textLatex: 'Chronological sequence' },
-          { id: 'B', textLatex: 'Cause and effect analysis' },
-          { id: 'C', textLatex: 'Comparison and contrast pattern' },
-        ],
-        correctOptionId: 'C',
-        explanationLatex:
-          'Comparison and contrast evaluates dual subjects by organizing their parallel features, strengths, and distinctions systematically.',
-      },
-    ];
+    return [];
   };
 
   // ==========================================================================
@@ -975,6 +872,49 @@ export function CourseExamsDirectFlowScreen({
   // ==========================================================================
   if (stage === 'RUNNING' && runningExamSet) {
     const questions = getQuestionsForExamSet(runningExamSet);
+    if (questions.length === 0) {
+      return (
+        <ScrollView
+          style={[styles.container, { backgroundColor: tokens.background }]}
+          contentContainerStyle={styles.scrollContent}
+        >
+          <TouchableOpacity
+            onPress={() => {
+              setStage('LIST');
+              setRunningExamSet(null);
+            }}
+            style={styles.backBtnRow}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            activeOpacity={0.7}
+          >
+            <View
+              style={[
+                styles.topBackArrowBtn,
+                { backgroundColor: tokens.surface, borderColor: tokens.border },
+              ]}
+            >
+              <MasteraIcon
+                name="chevron-left"
+                size={18}
+                color={tokens.textPrimary}
+              />
+            </View>
+            <Text style={[styles.backBtnText, { color: tokens.textPrimary }]}>
+              {runningExamSet.title}
+            </Text>
+          </TouchableOpacity>
+          <View style={{ alignItems: 'center', justifyContent: 'center', padding: SPACING.xl, marginTop: 40 }}>
+            <MasteraIcon name="award" size={40} color={tokens.textMuted} />
+            <Text style={{ marginTop: 12, fontSize: 16, fontWeight: '600', color: tokens.textPrimary }}>
+              No questions published yet
+            </Text>
+            <Text style={{ marginTop: 4, fontSize: 13, color: tokens.textMuted, textAlign: 'center' }}>
+              The questions for this exam set are currently being prepared.
+            </Text>
+          </View>
+        </ScrollView>
+      );
+    }
     const currentQ = questions[questionIndex] ?? questions[0]!;
     const chosenOptionId = currentQ ? selectedAnswers[currentQ.id] : undefined;
 
@@ -1155,6 +1095,9 @@ export function CourseExamsDirectFlowScreen({
   // SCREEN 1 & 2: EXAM LIST & START DRAWER (preview: "1 · List" & "2 · Start button")
   // ==========================================================================
   const setsForSubTab = examSets.filter((es) => {
+    if (courseId && es.item.courseId && es.item.courseId !== courseId) {
+      return false;
+    }
     if (activeExamSubTab === 'COC') {
       return (
         es.item.category === 'COC' ||
@@ -1165,35 +1108,7 @@ export function CourseExamsDirectFlowScreen({
     return es.item.category === activeExamSubTab;
   });
 
-  const effectiveSetsForSubTab =
-    setsForSubTab.length > 0
-      ? setsForSubTab
-      : activeExamSubTab === 'COC'
-      ? [
-          {
-            item: {
-              id: 'exam-coc-national-std',
-              examSetCode: 'EXAM-COC-NAT-2026',
-              category: 'COC' as const,
-              universityId: null,
-              programId: null,
-              courseId: null,
-              semester: 1 as const,
-              stream: 'COMMON' as const,
-              year: '2026',
-              title: `${shortCourseTitle} National COC Exam`,
-              questionCount: 20,
-              timeAllowedMinutes: 120,
-              isFreeSample: true,
-              version: 1,
-              status: 'PUBLISHED' as const,
-            },
-            canOpenNow: true,
-            accessBadge: 'Open' as const,
-            updateAvailable: false,
-          },
-        ]
-      : setsForSubTab;
+  const effectiveSetsForSubTab = setsForSubTab;
 
   return (
     <ScrollView
@@ -1329,74 +1244,86 @@ export function CourseExamsDirectFlowScreen({
 
       {/* Direct Exam Set Cards matching screenshot */}
       <View style={styles.booksCol}>
-        {effectiveSetsForSubTab.map((row) => {
-          const es = row.item;
-          const isLocked = row.accessBadge === 'Locked';
-          const badgeLabel = isLocked
-            ? 'Locked'
-            : row.accessBadge === 'Downloaded'
-            ? 'Downloaded'
-            : es.isFreeSample
-            ? 'Free'
-            : 'Open';
+        {effectiveSetsForSubTab.length === 0 ? (
+          <View style={{ alignItems: 'center', justifyContent: 'center', padding: SPACING.xl, marginTop: 40 }}>
+            <MasteraIcon name="award" size={40} color={tokens.textMuted} />
+            <Text style={{ marginTop: 12, fontSize: 16, fontWeight: '600', color: tokens.textPrimary }}>
+              No {activeExamSubTab} exams published yet
+            </Text>
+            <Text style={{ marginTop: 4, fontSize: 13, color: tokens.textMuted, textAlign: 'center' }}>
+              {activeExamSubTab} examinations for {courseTitle} will appear here when scheduled by the university.
+            </Text>
+          </View>
+        ) : (
+          effectiveSetsForSubTab.map((row) => {
+            const es = row.item;
+            const isLocked = row.accessBadge === 'Locked';
+            const badgeLabel = isLocked
+              ? 'Locked'
+              : row.accessBadge === 'Downloaded'
+              ? 'Downloaded'
+              : es.isFreeSample
+              ? 'Free'
+              : 'Open';
 
-          return (
-            <TouchableOpacity
-              key={es.id}
-              onPress={() => {
-                if (isLocked) {
-                  onLockedExamTap();
-                } else {
-                  setPendingStartExamSet(es);
-                }
-              }}
-              activeOpacity={0.7}
-              style={[
-                styles.bookRow,
-                {
-                  backgroundColor: tokens.surface,
-                  borderColor:
-                    pendingStartExamSet?.id === es.id
-                      ? tokens.primary
-                      : tokens.border,
-                },
-              ]}
-            >
-              <View style={{ flex: 1 }}>
-                <Text
-                  style={[styles.bookRowTitle, { color: tokens.textPrimary }]}
-                >
-                  {es.title}
-                </Text>
-                <Text
-                  style={[styles.bookRowMeta, { color: tokens.textMuted }]}
-                >
-                  {es.year} {es.questionCount || 20} questions · {es.timeAllowedMinutes} min
-                </Text>
-              </View>
-
-              {/* Cream/Amber Badge Pill */}
-              <View
+            return (
+              <TouchableOpacity
+                key={es.id}
+                onPress={() => {
+                  if (isLocked) {
+                    onLockedExamTap();
+                  } else {
+                    setPendingStartExamSet(es);
+                  }
+                }}
+                activeOpacity={0.7}
                 style={[
-                  styles.examBadgePill,
+                  styles.bookRow,
                   {
-                    backgroundColor: tokens.amberSoft,
-                    borderColor: tokens.border,
+                    backgroundColor: tokens.surface,
+                    borderColor:
+                      pendingStartExamSet?.id === es.id
+                        ? tokens.primary
+                        : tokens.border,
                   },
                 ]}
               >
-                <Text
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={[styles.bookRowTitle, { color: tokens.textPrimary }]}
+                  >
+                    {es.title}
+                  </Text>
+                  <Text
+                    style={[styles.bookRowMeta, { color: tokens.textMuted }]}
+                  >
+                    {es.year} {es.questionCount || 20} questions · {es.timeAllowedMinutes} min
+                  </Text>
+                </View>
+
+                {/* Cream/Amber Badge Pill */}
+                <View
                   style={[
-                    styles.examBadgePillText,
-                    { color: tokens.amber, fontWeight: '700' },
+                    styles.examBadgePill,
+                    {
+                      backgroundColor: tokens.amberSoft,
+                      borderColor: tokens.border,
+                    },
                   ]}
                 >
-                  {badgeLabel}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          );
-        })}
+                  <Text
+                    style={[
+                      styles.examBadgePillText,
+                      { color: tokens.amber, fontWeight: '700' },
+                    ]}
+                  >
+                    {badgeLabel}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })
+        )}
       </View>
 
       {/* Screen 2: Start Exam Bottom Sheet / Drawer */}
