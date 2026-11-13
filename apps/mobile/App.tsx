@@ -342,16 +342,23 @@ export default function App(): any {
     );
   }
 
-  // Scoped books and exam sets for the selected course
+  // Scoped content specifically for the selected course (Strict course isolation, zero cross-course leakage)
   const courseBooks = selectedCourse
     ? appData.bookGroups.filter((b) => b.courseId === selectedCourse.id)
     : [];
-  const effectiveBooks: CatalogBookGroupDto[] =
-    courseBooks.length > 0 ? courseBooks : appData.bookGroups;
+  const materialBooks = courseBooks.filter((b) =>
+    ['MODULES', 'NOTES', 'AMHARIC_NOTE'].includes(b.category)
+  );
+  const quizBooks = courseBooks.filter((b) =>
+    ['QUIZ_1', 'QUIZ_2', 'QUIZ_3'].includes(b.category)
+  );
+  const courseChapters = selectedCourse
+    ? appData.chapters.filter((ch) => ch.courseId === selectedCourse.id)
+    : [];
 
   const courseExamSets: ResolvedCatalogRowView<CatalogExamSetMetaDto>[] = selectedCourse
     ? appData.examSets
-        .filter((es) => !es.courseId || es.courseId === selectedCourse.id)
+        .filter((es) => es.courseId === selectedCourse.id)
         .map((es) => ({
           item: es,
           canOpenNow: true,
@@ -446,12 +453,14 @@ export default function App(): any {
           courseTopTab === 'TESTS' ? (
             <CourseTestsQuizFlowScreen
               courseTitle={selectedCourse.title}
-              quizBooks={effectiveBooks.map((b) => ({
+              courseId={selectedCourse.id}
+              quizBooks={quizBooks.map((b) => ({
                 item: b,
                 canOpenNow: true,
                 accessBadge: 'Included',
                 updateAvailable: false,
               }))}
+              courseChapters={courseChapters}
               chaptersByBookId={appData.chaptersByBookId}
               questionsByChapterId={appData.questionsByChapterId}
               onSwitchCourseTopTab={(tab) => setCourseTopTab(tab)}
@@ -464,6 +473,7 @@ export default function App(): any {
           ) : courseTopTab === 'EXAMS' ? (
             <CourseExamsDirectFlowScreen
               courseTitle={selectedCourse.title}
+              courseId={selectedCourse.id}
               examSets={courseExamSets}
               questionsByExamSetId={appData.questionsByExamSetId}
               accountState="LOCAL_ONLY"
@@ -477,7 +487,8 @@ export default function App(): any {
             <CourseMaterialAndReaderScreens
               courseTitle={selectedCourse.title}
               courseCode={selectedCourse.code}
-              books={effectiveBooks}
+              books={materialBooks}
+              courseChapters={courseChapters}
               chaptersByBookId={appData.chaptersByBookId}
               chapterBodyByChapterId={appData.chapterBodyByChapterId}
               isCourseDownloaded={downloadedCourseIds.includes(selectedCourse.id)}
