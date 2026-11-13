@@ -24,6 +24,8 @@ import { LockedContentModal } from '../shared/components/LockedContentModal';
 export interface CourseMaterialAndReaderScreensProps {
   courseTitle: string;
   courseCode?: string;
+  courseId?: string;
+  courseChapters?: CatalogChapterMetaDto[];
   books: CatalogBookGroupDto[];
   chaptersByBookId: Record<
     string,
@@ -56,6 +58,8 @@ export interface CourseMaterialAndReaderScreensProps {
 export function CourseMaterialAndReaderScreens({
   courseTitle,
   courseCode,
+  courseId,
+  courseChapters,
   books,
   chaptersByBookId,
   chapterBodyByChapterId,
@@ -244,7 +248,25 @@ export function CourseMaterialAndReaderScreens({
   // Screen 7 in preview (4).webp: "Chapters" List for a Selected Book
   // -------------------------------------------------------------------
   if (selectedBook) {
-    const rawChapters = chaptersByBookId[selectedBook.id] || [];
+    const bookChaptersFromStore = chaptersByBookId[selectedBook.id];
+    const rawChapters =
+      bookChaptersFromStore && bookChaptersFromStore.length > 0
+        ? bookChaptersFromStore
+        : courseChapters
+        ? courseChapters
+            .filter(
+              (ch) =>
+                ch.bookGroupId === selectedBook.id ||
+                (ch.courseId === selectedBook.courseId &&
+                  ch.category === selectedBook.category)
+            )
+            .map((ch, idx) => ({
+              item: ch,
+              canOpenNow: true,
+              accessBadge: ch.isFree ? 'Free' : idx === 3 ? 'Locked' : 'Included',
+              isCompleted: idx === 0,
+            }))
+        : [];
     const chapters = rawChapters.map((r, idx) => ({
       item: r.item || r,
       canOpenNow: r.canOpenNow !== false,
@@ -282,7 +304,18 @@ export function CourseMaterialAndReaderScreens({
 
           {/* Chapter Rows matching preview (4).webp Screen 7 */}
           <View style={styles.chaptersList}>
-            {chapters.map((ch, idx) => {
+            {chapters.length === 0 ? (
+              <View style={{ alignItems: 'center', justifyContent: 'center', padding: SPACING.xl, marginTop: 24 }}>
+                <MasteraIcon name="book-open" size={32} color={tokens.textMuted} />
+                <Text style={{ marginTop: 10, fontSize: 15, fontWeight: '600', color: tokens.textPrimary }}>
+                  No chapters published for this book yet
+                </Text>
+                <Text style={{ marginTop: 4, fontSize: 13, color: tokens.textMuted, textAlign: 'center' }}>
+                  Chapters will appear here once published in the academic catalog.
+                </Text>
+              </View>
+            ) : (
+              chapters.map((ch, idx) => {
               const isLocked = ch.accessBadge === 'Locked' || idx === 3;
               const isCompleted = ch.isCompleted;
               const isChapterDownloaded =
@@ -428,7 +461,7 @@ export function CourseMaterialAndReaderScreens({
                   )}
                 </View>
               );
-            })}
+            }))}
           </View>
 
           {/* Dynamic Download / Delete Course Action */}
@@ -510,17 +543,18 @@ export function CourseMaterialAndReaderScreens({
       return (
         b.category === 'NOTES' ||
         b.title.toLowerCase().includes('notes') ||
+        b.title.toLowerCase().includes('note') ||
         b.title.toLowerCase().includes('formula')
       );
     }
     // Default MODULES
     return (
       b.category === 'MODULES' ||
-      (!b.title.includes('አማርኛ') && !b.title.toLowerCase().includes('notes'))
+      (!b.title.includes('አማርኛ') && !b.title.toLowerCase().includes('note') && !b.title.toLowerCase().includes('quiz'))
     );
   });
 
-  const effectiveBooksList = filteredBooks.length > 0 ? filteredBooks : books;
+  const effectiveBooksList = filteredBooks;
 
   return (
     <View style={[styles.container, { backgroundColor: tokens.background }]}>
@@ -700,48 +734,66 @@ export function CourseMaterialAndReaderScreens({
 
         {/* Books Cards matching preview (4).webp Screen 6 */}
         <View style={styles.booksList}>
-          {effectiveBooksList.map((book, idx) => {
-            const rawChapters = chaptersByBookId[book.id] || [];
-            const chapterCount = rawChapters.length > 0 ? rawChapters.length : 4;
+          {effectiveBooksList.length === 0 ? (
+            <View style={{ alignItems: 'center', justifyContent: 'center', padding: SPACING.xl, marginTop: 40 }}>
+              <MasteraIcon name="book-open" size={40} color={tokens.textMuted} />
+              <Text style={{ marginTop: 12, fontSize: 16, fontWeight: '600', color: tokens.textPrimary }}>
+                No {activeCategory === 'AMHARIC_NOTE' ? 'Amharic notes' : activeCategory === 'NOTES' ? 'notes' : 'modules'} published yet
+              </Text>
+              <Text style={{ marginTop: 4, fontSize: 13, color: tokens.textMuted, textAlign: 'center' }}>
+                Content for {courseTitle} will appear here when published in the curriculum.
+              </Text>
+            </View>
+          ) : (
+            effectiveBooksList.map((book, idx) => {
+              const bookChaptersFromStore = chaptersByBookId[book.id];
+              const bookChapters =
+                bookChaptersFromStore && bookChaptersFromStore.length > 0
+                  ? bookChaptersFromStore
+                  : courseChapters
+                  ? courseChapters.filter((ch) => ch.bookGroupId === book.id)
+                  : [];
+              const chapterCount = bookChapters.length;
 
-            return (
-              <TouchableOpacity
-                key={book.id}
-                style={[
-                  styles.bookCard,
-                  { backgroundColor: tokens.surface, borderColor: tokens.border },
-                ]}
-                onPress={() => setSelectedBook(book)}
-                activeOpacity={0.75}
-              >
-                <View style={styles.bookCardLeft}>
-                  {/* Square Badge e.g. M1, M2, N1 */}
-                  <View style={[styles.bookBadgeSquare, { backgroundColor: tokens.badgeBg }]}>
-                    <Text style={[styles.bookBadgeLetter, { color: tokens.badgeText }]}>
-                      {activeCategory === 'AMHARIC_NOTE' ? 'አ' : activeCategory === 'NOTES' ? 'N' : 'M'}
-                      {idx + 1}
-                    </Text>
+              return (
+                <TouchableOpacity
+                  key={book.id}
+                  style={[
+                    styles.bookCard,
+                    { backgroundColor: tokens.surface, borderColor: tokens.border },
+                  ]}
+                  onPress={() => setSelectedBook(book)}
+                  activeOpacity={0.75}
+                >
+                  <View style={styles.bookCardLeft}>
+                    {/* Square Badge e.g. M1, M2, N1 */}
+                    <View style={[styles.bookBadgeSquare, { backgroundColor: tokens.badgeBg }]}>
+                      <Text style={[styles.bookBadgeLetter, { color: tokens.badgeText }]}>
+                        {activeCategory === 'AMHARIC_NOTE' ? 'አ' : activeCategory === 'NOTES' ? 'N' : 'M'}
+                        {idx + 1}
+                      </Text>
+                    </View>
+
+                    <View style={styles.bookCardTextGroup}>
+                      <Text style={[styles.bookCardTitle, { color: tokens.textPrimary }]}>
+                        {book.title}
+                      </Text>
+                      <Text style={[styles.bookCardSubtitle, { color: tokens.textMuted }]}>
+                        {book.subtitle || 'Standard semester curriculum module'}
+                      </Text>
+                    </View>
                   </View>
 
-                  <View style={styles.bookCardTextGroup}>
-                    <Text style={[styles.bookCardTitle, { color: tokens.textPrimary }]}>
-                      {book.title}
-                    </Text>
-                    <Text style={[styles.bookCardSubtitle, { color: tokens.textMuted }]}>
-                      {book.subtitle || 'Standard semester curriculum module'}
+                  {/* Chapter Count Badge */}
+                  <View style={[styles.chapterCountPill, { backgroundColor: tokens.primarySoft }]}>
+                    <Text style={[styles.chapterCountText, { color: tokens.primary }]}>
+                      {chapterCount} Ch
                     </Text>
                   </View>
-                </View>
-
-                {/* Chapter Count Badge */}
-                <View style={[styles.chapterCountPill, { backgroundColor: tokens.primarySoft }]}>
-                  <Text style={[styles.chapterCountText, { color: tokens.primary }]}>
-                    {chapterCount} Ch
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
+                </TouchableOpacity>
+              );
+            })
+          )}
         </View>
       </ScrollView>
 
