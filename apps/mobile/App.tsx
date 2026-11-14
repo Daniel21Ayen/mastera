@@ -6,6 +6,7 @@ import {
   StyleSheet,
   StatusBar,
   Platform,
+  AppState,
 } from 'react-native';
 import {
   STUDENT_THEMES,
@@ -102,12 +103,20 @@ export default function App(): any {
 
     syncFromDatabase();
 
-    // Check for continuous database updates every 8 seconds
-    const interval = setInterval(syncFromDatabase, 8000);
+    // Check for database updates every 60s while active (Phase 5: saves battery and data)
+    const interval = setInterval(syncFromDatabase, 60000);
+
+    // Also trigger immediate sync when app returns to foreground
+    const appStateSub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        syncFromDatabase();
+      }
+    });
 
     return () => {
       isCancelled = true;
       clearInterval(interval);
+      appStateSub.remove();
     };
   }, []);
 
