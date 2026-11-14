@@ -59,7 +59,7 @@ export function buildDataStateFromSnapshot(
         chapterNumber: ch.orderIndex,
         contentVersion: ch.version,
         isActive: true,
-        priceETB: ch.isFree ? 0 : 60,
+        priceETB: 0,
       },
       canOpenNow: true,
       accessBadge: ch.isFree ? 'Free' : 'Included',
@@ -137,26 +137,10 @@ export function buildDataStateFromSnapshot(
     }
   }
 
-  // Fallback default question if an exam set has no questions yet
+  // Ensure every exam set key is present in questionsByExamSetId
   for (const es of examSets) {
-    const existing = questionsByExamSetId[es.id];
-    if (!existing || existing.length === 0) {
-      questionsByExamSetId[es.id] = [
-        {
-          id: `q-fallback-${es.id}-1`,
-          displayNumber: 1,
-          questionType: 'MULTIPLE_CHOICE',
-          promptLatex: `Under the official syllabus for ${es.title}, evaluate the primary governing principle.`,
-          options: [
-            { id: 'A', textLatex: 'Strict continuity and differentiability' },
-            { id: 'B', textLatex: 'Conservation of total energy and linear momentum' },
-            { id: 'C', textLatex: 'Empirical anthropological field methodology' },
-            { id: 'D', textLatex: 'All of the above in integrated science' },
-          ],
-          correctOptionId: 'A',
-          explanationLatex: 'Derived directly from university examination board curriculum standards.',
-        },
-      ];
+    if (!questionsByExamSetId[es.id]) {
+      questionsByExamSetId[es.id] = [];
     }
   }
 
@@ -264,7 +248,7 @@ export function mergeDeltaIntoState(
         chapterNumber: ch.orderIndex,
         contentVersion: ch.version,
         isActive: true,
-        priceETB: ch.isFree ? 0 : 60,
+        priceETB: 0,
       },
       canOpenNow: true,
       accessBadge: ch.isFree ? 'Free' : 'Included',
@@ -344,8 +328,8 @@ export function getCandidateHosts(): string[] {
   const addHostPair = (ip: string) => {
     if (ip && ip !== 'localhost' && ip !== '127.0.0.1') {
       hosts.push(`http://${ip}:53317`); // UFW firewall pre-whitelisted port
-      hosts.push(`http://${ip}:3000`);
-      hosts.push(`http://${ip}:8081`); // Metro proxy fallback
+      hosts.push(`http://${ip}:8081`); // Metro proxy fallback (UFW allowed)
+      hosts.push(`http://${ip}:3000`); // Direct API port
     }
   };
 
@@ -381,13 +365,13 @@ export function getCandidateHosts(): string[] {
   } catch {}
 
   // 3. Known machine local IPs and development fallbacks
-  addHostPair('172.16.131.134');
   addHostPair('172.16.132.37');
-  addHostPair('172.16.131.91');
-  hosts.push('http://localhost:3000');
+  hosts.push('http://localhost:53317');
   hosts.push('http://localhost:8081');
-  hosts.push('http://10.0.2.2:3000');
+  hosts.push('http://localhost:3000');
+  hosts.push('http://10.0.2.2:53317');
   hosts.push('http://10.0.2.2:8081');
+  hosts.push('http://10.0.2.2:3000');
   return [...new Set(hosts)];
 }
 
@@ -400,7 +384,7 @@ export async function syncLiveCatalogFromApi(): Promise<RealAppDataState | null>
   for (const host of candidateHosts) {
     try {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 3500);
+      const timer = setTimeout(() => controller.abort(), 1800);
 
       const snapRes = await fetch(`${host}/catalog/snapshot`, {
         signal: controller.signal,
@@ -418,7 +402,7 @@ export async function syncLiveCatalogFromApi(): Promise<RealAppDataState | null>
         let liveQuestions: any[] = [];
         try {
           const qController = new AbortController();
-          const qTimer = setTimeout(() => qController.abort(), 2000);
+          const qTimer = setTimeout(() => qController.abort(), 1500);
           const qRes = await fetch(`${host}/assessments/questions`, {
             signal: qController.signal,
             headers: { Accept: 'application/json' },
