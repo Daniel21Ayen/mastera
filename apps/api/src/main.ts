@@ -69,6 +69,39 @@ async function bootstrap() {
 
   await app.listen(envConfig.port, '0.0.0.0');
   console.log(`[Mastera API] Running on http://localhost:${envConfig.port}`);
+
+  // Also bind to whitelisted mobile Wi-Fi port 53317 so physical devices on Wi-Fi are never blocked by host firewalls
+  if (envConfig.port !== 53317) {
+    try {
+      const http = require('http');
+      const bridge = http.createServer((req: any, res: any) => {
+        const proxyReq = http.request(
+          {
+            hostname: '127.0.0.1',
+            port: envConfig.port,
+            path: req.url,
+            method: req.method,
+            headers: req.headers,
+          },
+          (proxyRes: any) => {
+            res.writeHead(proxyRes.statusCode || 200, proxyRes.headers);
+            proxyRes.pipe(res, { end: true });
+          }
+        );
+        proxyReq.on('error', (err: any) => {
+          console.warn('[Bridge 53317 error]', err.message);
+          res.writeHead(502);
+          res.end();
+        });
+        req.pipe(proxyReq, { end: true });
+      });
+      bridge.listen(53317, '0.0.0.0', () => {
+        console.log('[Mastera API] Mobile Wi-Fi bridge listening on http://0.0.0.0:53317');
+      });
+    } catch (err: any) {
+      console.warn('Could not bind secondary port 53317:', err?.message);
+    }
+  }
 }
 
 if (require.main === module) {
