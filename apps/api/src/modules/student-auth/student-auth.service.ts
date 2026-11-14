@@ -12,10 +12,35 @@ export interface StudentAuthRecord {
   isActive: boolean;
 }
 
+export interface StudentSummaryDto {
+  name: string;
+  studentCode: string | null;
+  accountState: string;
+  bundleDaysRemaining: number;
+  pendingOrdersCount: number;
+  entitlement: {
+    daysLeft: number;
+    expiresAt: string | null;
+    coursesCount: number;
+  };
+  perCourseProgress: Record<string, number>;
+  continueLearningTarget: {
+    courseId?: string;
+    courseTitle?: string;
+    chapterTitle?: string;
+    progressPercent?: number;
+  } | null;
+}
+
 export interface StudentAuthRepositoryPort {
   findByIdentifier(identifier: string): Promise<StudentAuthRecord | null>;
   updateDeviceHardwareId(studentId: string, deviceHardwareId: string): Promise<void>;
   updatePassword(studentId: string, salt: string, passwordHash: string): Promise<void>;
+  getStudentSummary?(query: {
+    localAccountId?: string | undefined;
+    studentCode?: string | undefined;
+    identifier?: string | undefined;
+  }): Promise<StudentSummaryDto>;
 }
 
 @Injectable()
@@ -52,6 +77,29 @@ export class StudentAuthService {
     }
 
     return { success: true, student };
+  }
+
+  /**
+   * Returns live dynamic summary for student home and status cards (Phase 2).
+   */
+  async getStudentSummary(query: {
+    localAccountId?: string | undefined;
+    studentCode?: string | undefined;
+    identifier?: string | undefined;
+  }): Promise<StudentSummaryDto> {
+    if (this.repo.getStudentSummary) {
+      return this.repo.getStudentSummary(query);
+    }
+    return {
+      name: 'Student',
+      studentCode: null,
+      accountState: 'LOCAL_ONLY',
+      bundleDaysRemaining: 0,
+      pendingOrdersCount: 0,
+      entitlement: { daysLeft: 0, expiresAt: null, coursesCount: 0 },
+      perCourseProgress: {},
+      continueLearningTarget: null,
+    };
   }
 
   /**
