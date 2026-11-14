@@ -55,7 +55,7 @@ export interface AcademicScopeState {
 export interface ProfileAndStoreScreensProps {
   initialScreen?: ProfileFlowScreen;
   accountState: StudentAccountState;
-  studentCode: string | null; // e.g., "MS0001"
+  studentCode: string | null;
   fullName: string;
   identifier: string; // phone or email
   email?: string;
@@ -70,6 +70,9 @@ export interface ProfileAndStoreScreensProps {
   selectedCourseIds: string[];
   onToggleCourseCheckInOut: (courseId: string) => void;
   paymentMethods: PaymentMethodEntryDto[];
+  bundlePriceETB?: number;
+  freshmanPackagePriceETB?: number;
+  bundleDurationDays?: number;
   onOpenDownloadsManager: () => void;
   onChangeUiLanguage: (lang: 'en' | 'am') => void;
   onReleaseDeviceAndLogout: () => void;
@@ -103,6 +106,9 @@ export function ProfileAndStoreScreens({
   selectedCourseIds,
   onToggleCourseCheckInOut,
   paymentMethods,
+  bundlePriceETB = 150,
+  freshmanPackagePriceETB = 350,
+  bundleDurationDays = 150,
   onOpenDownloadsManager,
   onChangeUiLanguage,
   onReleaseDeviceAndLogout,
@@ -1389,7 +1395,7 @@ export function ProfileAndStoreScreens({
         </Text>
         <View style={[styles.infoItem, { backgroundColor: tokens.surface, borderColor: tokens.border }]}>
           <Text style={[styles.infoItemText, { color: tokens.textPrimary, fontWeight: '600' }]}>
-            Logic · <Text style={{ color: tokens.primary }}>38 days left</Text>
+            {departmentCourses[0]?.title || 'Curriculum Courses'} · <Text style={{ color: tokens.primary }}>{bundleDurationDays} days left</Text>
           </Text>
         </View>
 
@@ -1448,7 +1454,7 @@ export function ProfileAndStoreScreens({
               </Text>
             </View>
             <Text style={[styles.priceTag, { color: tokens.primary }]}>
-              200 ETB
+              {bundlePriceETB} ETB
             </Text>
           </TouchableOpacity>
 
@@ -1468,7 +1474,7 @@ export function ProfileAndStoreScreens({
               </Text>
             </View>
             <Text style={[styles.priceTag, { color: tokens.primary }]}>
-              350 ETB
+              {freshmanPackagePriceETB} ETB
             </Text>
           </TouchableOpacity>
 
@@ -1607,7 +1613,7 @@ export function ProfileAndStoreScreens({
           ]}
         >
           <Text style={[styles.primaryBtnText, { color: tokens.surface }]}>
-            Continue · 200 ETB
+            Continue · {bundlePriceETB} ETB
           </Text>
         </TouchableOpacity>
       </ScrollView>
@@ -1636,10 +1642,10 @@ export function ProfileAndStoreScreens({
 
         <View style={styles.paymentSummaryBox}>
           <Text style={[styles.paymentAmountTitle, { color: tokens.textPrimary }]}>
-            Send exactly 200 ETB
+            Send exactly {bundlePriceETB} ETB
           </Text>
           <Text style={[styles.paymentDurationSub, { color: tokens.primary }]}>
-            180 days access after approval
+            {bundleDurationDays} days access after approval
           </Text>
         </View>
 
@@ -1949,7 +1955,7 @@ export function ProfileAndStoreScreens({
           <TextInput
             value={setupFullName}
             onChangeText={setSetupFullName}
-            placeholder="e.g. Abebe Kebede"
+            placeholder="e.g. Full Name"
             placeholderTextColor={tokens.textMuted}
             style={[
               styles.textInput,
@@ -2163,13 +2169,13 @@ export function ProfileAndStoreScreens({
           ]}
         >
           <Text style={[styles.studentIdLabel, { color: tokens.white }]}>YOUR STUDENT ID</Text>
-          <Text style={[styles.studentIdNumber, { color: tokens.white }]}>MS0001</Text>
+          <Text style={[styles.studentIdNumber, { color: tokens.white }]}>{studentCode || 'REGISTERED'}</Text>
         </View>
 
         <View style={styles.approvedPillsRow}>
           <View style={[styles.badgePill, { backgroundColor: tokens.surface, borderColor: tokens.border, borderWidth: 1 }]}>
             <Text style={[styles.badgePillText, { color: tokens.textPrimary }]}>
-              180 days access
+              {bundleDurationDays} days access
             </Text>
           </View>
           <View style={[styles.badgePill, { backgroundColor: tokens.surface, borderColor: tokens.border, borderWidth: 1 }]}>
