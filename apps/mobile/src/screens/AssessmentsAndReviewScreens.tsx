@@ -1095,15 +1095,15 @@ export function CourseExamsDirectFlowScreen({
   // SCREEN 1 & 2: EXAM LIST & START DRAWER (preview: "1 · List" & "2 · Start button")
   // ==========================================================================
   const setsForSubTab = examSets.filter((es) => {
-    if (courseId && es.item.courseId && es.item.courseId !== courseId) {
-      return false;
-    }
     if (activeExamSubTab === 'COC') {
       return (
         es.item.category === 'COC' ||
         es.item.examSetCode.includes('COC') ||
         es.item.title.toLowerCase().includes('coc')
       );
+    }
+    if (courseId && es.item.courseId && es.item.courseId !== courseId) {
+      return false;
     }
     return es.item.category === activeExamSubTab;
   });
