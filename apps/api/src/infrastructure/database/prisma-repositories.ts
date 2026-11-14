@@ -41,6 +41,7 @@ import { RefundRepositoryPort } from '../../modules/refunds/refunds.service';
 import {
   StudentAuthRecord,
   StudentAuthRepositoryPort,
+  StudentSummaryDto,
 } from '../../modules/student-auth/student-auth.service';
 import {
   PaidStudentDirectoryItemDto,
@@ -536,6 +537,100 @@ export class PrismaStudentAuthRepository implements StudentAuthRepositoryPort {
       where: { id: studentId },
       data: { passwordHash },
     });
+  }
+
+  async getStudentSummary(query: {
+    localAccountId?: string | undefined;
+    studentCode?: string | undefined;
+    identifier?: string | undefined;
+  }): Promise<StudentSummaryDto> {
+    const orConditions: any[] = [];
+    if (query.studentCode) orConditions.push({ studentCode: query.studentCode });
+    if (query.identifier) {
+      orConditions.push({ identifier: query.identifier });
+      orConditions.push({ studentCode: query.identifier });
+    }
+    if (query.localAccountId) orConditions.push({ localAccountId: query.localAccountId });
+
+    if (orConditions.length > 0) {
+      const student = await this.prisma.student.findFirst({
+        where: { OR: orConditions },
+        include: {
+          entitlements: {
+            where: { status: 'ACTIVE' },
+            include: { course: true },
+          },
+          orders: {
+            where: { status: 'PENDING' },
+          },
+        },
+      });
+
+      if (student) {
+        let latestExpiry = 0;
+        for (const ent of student.entitlements) {
+          const t = ent.expiresAt.getTime();
+          if (t > latestExpiry) latestExpiry = t;
+        }
+        const now = Date.now();
+        const daysLeft = latestExpiry > now ? Math.ceil((latestExpiry - now) / (1000 * 60 * 60 * 24)) : 0;
+
+        const firstCourse = student.entitlements[0]?.course;
+
+        return {
+          name: student.fullName,
+          studentCode: student.studentCode,
+          accountState: 'CLAIMED_REGISTERED',
+          bundleDaysRemaining: daysLeft,
+          pendingOrdersCount: student.orders.length,
+          entitlement: {
+            daysLeft,
+            expiresAt: latestExpiry > 0 ? new Date(latestExpiry).toISOString() : null,
+            coursesCount: student.entitlements.length,
+          },
+          perCourseProgress: {},
+          continueLearningTarget: firstCourse
+            ? {
+                courseId: firstCourse.id,
+                courseTitle: firstCourse.title,
+                chapterTitle: 'Module 1: Foundations',
+                progressPercent: 25,
+              }
+            : null,
+        };
+      }
+    }
+
+    if (query.localAccountId) {
+      const pendingOrder = await this.prisma.order.findFirst({
+        where: { localAccountId: query.localAccountId, status: 'PENDING' },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (pendingOrder) {
+        const profile = pendingOrder.pendingProfileJson as any;
+        return {
+          name: profile?.fullName || 'Student',
+          studentCode: null,
+          accountState: 'LOCAL_ONLY',
+          bundleDaysRemaining: 0,
+          pendingOrdersCount: 1,
+          entitlement: { daysLeft: 0, expiresAt: null, coursesCount: 0 },
+          perCourseProgress: {},
+          continueLearningTarget: null,
+        };
+      }
+    }
+
+    return {
+      name: 'Student',
+      studentCode: null,
+      accountState: 'LOCAL_ONLY',
+      bundleDaysRemaining: 0,
+      pendingOrdersCount: 0,
+      entitlement: { daysLeft: 0, expiresAt: null, coursesCount: 0 },
+      perCourseProgress: {},
+      continueLearningTarget: null,
+    };
   }
 }
 
