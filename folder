@@ -285,3 +285,72 @@ npm run ci:gates
 Super Admin	            admin@mastara.demo	    MasteraAdmin@2026!	     Full system access (pricing, publish, approve payments, IAM, roles)
 Academic Coordinator	academic@mastara.demo	MasteraAcademic@2026!	 Author courses, modules, chapters, quizzes, and exam sets
 Operations Admin	    ops@mastara.demo	    MasteraOps@2026!	     Review student payments, release hardware bindings, support tickets
+# Mastera – Phased Plan: 100% Database/MinIO-driven, Admin-controlled, Auto-sync
+
+Based on the uploaded repo (`apps/api` NestJS+Prisma, `apps/admin` Next.js, `apps/mobile` Expo) and SRS v3.4.
+
+## Audit: what is still not coming from the database (mobile)
+
+| Location | Problem |
+|---|---|
+| `App.tsx` Home props | `studentFirstName="Abebe"`, `accountState="LOCAL_ONLY"`, `pendingOrdersCount={1}`, `bundleDaysRemaining={38}`, `continueLearningProgressPercent={60}`, `'Communicative English'` fallback |
+| `App.tsx` | `useState('Abebe Kebede')`, `setStudentCode('MS0001')` |
+| `HomeDashboardScreens.tsx` | "Logic · 38 days left", `'Abebe'` fallback, "Semester Bundle · 200 ETB" |
+| `ProfileAndStoreScreens.tsx` | Hardcoded `200 ETB`, `350 ETB`, `Continue · 200 ETB`, `Send exactly 200 ETB`, `MS0001` |
+| `BeforeHomeAuthScreens.tsx` | `useState('Abebe Kebede')` default value |
+| `AssessmentsAndReviewScreens.tsx` | Fake fallback chapter quizzes (`c0000001-…` ids) and fake English questions when DB questions are missing |
+| `live-catalog-provider.ts` | `priceETB: ch.isFree ? 0 : 60`, `q-fallback-…` question, bundled snapshot used as initial data |
+| `scripts/verify-no-mocks.ts` | Only checks file names / 4 identifiers, so none of the above is caught |
+
+## Done in this delivery (Phase 0, safe changes)
+
+1. **COC removed from Home**: `onOpenCocExam` prop, its styles and the `App.tsx` wiring are gone.
+2. **COC lives in the Exams tab next to Mock** (`Mid | Final | Mock | COC`; this order already existed).
+3. **Removed the hardcoded "National COC Exam" fallback**. The list now shows only admin-published exams and an empty state when none exist.
+
+Files: `App.tsx`, `HomeDashboardScreens.tsx`, `AssessmentsAndReviewScreens.tsx` (replace the same paths under `apps/mobile`). I did not build or run the app, so run `npm run build` first.
+
+Caveat: COC sets have `courseId = null`, so check that the course-level Exams tab does not filter them out by course. The SRS says COC is filtered by university/program, not course.
+
+## Phase 1 – Strengthen the no-mock gate (½ day)
+- Extend `scripts/verify-no-mocks.ts` to fail on: `'Abebe'`, `MS0001`, `ETB` string literals in `apps/mobile`, `fallback`, `q-fallback`, and numeric literals assigned to price/days/percent props.
+- Add the same scan to CI (`ci-test-and-lint.yml`).
+
+## Phase 2 – Student identity & status from API (2–3 days)
+- Add `GET /student/me/summary` returning: name, student code, account state, entitlement (expiry, days left), pending order count, per-course progress, continue-learning target.
+- Mobile: replace the hardcoded Home props in `App.tsx` with this one hook (`useStudentSummary`), cached in SQLite for offline.
+- Remove the `'Abebe Kebede'` initial state.
+
+## Phase 3 – Pricing & store from `pricing_config` (2 days)
+- All ETB amounts, course-count limits, tier discounts and the 180-day duration come from `GET /commerce/settings` / `quote`.
+- Payment accounts (CBE, Telebirr, Abyssinia) already have admin CRUD (`/commerce/payment-methods`). The mobile checkout must render only that list.
+- Admin: add a live "what the student sees" preview to the pricing page.
+
+## Phase 4 – Quizzes, exams, questions fully from DB/MinIO (3 days)
+- Delete fake chapter/question fallbacks. Show loading/empty/error states instead.
+- Questions come from the course package stream (MinIO) or `/assessments/exam-sets/:id`, with SQLite cache.
+- Admin builders are kept as they are (Mid / Final / Mock / COC tabs already exist).
+
+## Phase 5 – Automatic sync when back online (3 days)
+Current state: Home polls `delta` every 8 s, and `MobileSyncEngine` also exists. These two paths overlap.
+- Make `MobileSyncEngine` the single path: triggers on app foreground, connection restored, and a ≥60 s timer while active (drop the 8 s poll to save battery/data).
+- Use `catalog_tombstones` so admin deletions/unpublishes remove content from the device. Bump `version` on every admin change.
+- Add content-package version check: if a downloaded course package is stale, re-download in the background (Wi-Fi only setting respected).
+- Push `entitlement` changes (approval, refund, revoke) via the existing Expo push service plus next-sync fallback.
+- Outbox: progress, attempts and profile edits flush on reconnect (only for registered students, per FR-A06).
+
+## Phase 6 – Admin enhancements (keep existing UI/UX) (3–4 days)
+- Home content controls: study-tip/announcement banner, featured course, quick-start card visibility (Daily Quiz, Exam Hall, Formula Sheets).
+- Publish/unpublish and "pin as free sample" toggles on every content row.
+- Sync status panel: per-student last sync time, app version, pending outbox size.
+- Audit log entries for every publish/price/payment-account change.
+
+## Phase 7 – Refactor (ongoing, after Phase 4 so behaviour is locked by tests)
+- Split the giant files: `ProfileAndStoreScreens.tsx` (2,947 lines), `AssessmentsAndReviewScreens.tsx` (~1,800), `BeforeHomeAuthScreens.tsx`, and admin `questions/[examType]/new/page.tsx` (1,746) and `ScanToPdfWizard.tsx` (1,576).
+- Mobile structure: `features/{auth,home,courses,assessments,progress,profile,store}/{screens,components,hooks,api}`.
+- Move `App.tsx` state into a store (Zustand or context) and a typed API client in `packages/contracts`.
+- Remove committed build output and secrets: `dist/`, `.next/`, `apps/api/.env`, `.d.ts.map` and `.js.map` files, and the stray `folder` file (it contains demo admin passwords). Rotate the JWT/S3 secrets.
+
+## Phase 8 – Release gates
+- E2E: admin edits price → student sees it after reconnect; admin unpublishes exam → disappears; offline → open cached course.
+- Size gate (<20 MB AAB) and no-mock gate in CI. does my project fulfill or have not fulfil if not fix based on this plan
