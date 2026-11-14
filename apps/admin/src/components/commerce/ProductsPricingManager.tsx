@@ -1182,6 +1182,256 @@ export function ProductsPricingManager({
         </div>
       </div>
 
+      {/* Live "What the Student Sees" Preview (Phase 3) */}
+      <div
+        style={{
+          backgroundColor: tokens.surface,
+          border: `1px solid ${tokens.border}`,
+          borderRadius: RADIUS.lg,
+          padding: SPACING.xl,
+          marginBottom: SPACING.xl,
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: SPACING.lg,
+          }}
+        >
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: SPACING.sm }}>
+              <span
+                style={{
+                  padding: `3px ${SPACING.md}px`,
+                  borderRadius: RADIUS.pill,
+                  backgroundColor: tokens.surfaceSubtle,
+                  color: tokens.primary,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: '0.5px',
+                }}
+              >
+                LIVE STUDENT PREVIEW
+              </span>
+              <span
+                style={{
+                  padding: '2px 8px',
+                  borderRadius: RADIUS.pill,
+                  backgroundColor: tokens.successBg,
+                  color: tokens.success,
+                  fontSize: 10,
+                  fontWeight: 700,
+                }}
+              >
+                REAL-TIME SYNC
+              </span>
+            </div>
+            <h3 style={{ margin: '8px 0 2px 0', color: tokens.textPrimary, fontSize: 16 }}>
+              What the Student Sees on Mobile Checkout
+            </h3>
+            <p style={{ margin: 0, fontSize: 12, color: tokens.textMuted }}>
+              This preview updates instantly as you adjust bundle prices, course limits, duration days, or payment methods above.
+            </p>
+          </div>
+        </div>
+
+        {/* Mobile Mockup Frame */}
+        <div
+          style={{
+            maxWidth: 420,
+            margin: '0 auto',
+            backgroundColor: tokens.background,
+            border: `2px solid ${tokens.border}`,
+            borderRadius: RADIUS.xl,
+            padding: SPACING.lg,
+          }}
+        >
+          {/* Mobile Screen Header */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              paddingBottom: SPACING.md,
+              borderBottom: `1px solid ${tokens.border}`,
+              marginBottom: SPACING.md,
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: tokens.textPrimary }}>
+                Store & Subscriptions
+              </div>
+              <div style={{ fontSize: 11, color: tokens.textMuted }}>
+                Select a package to unlock curriculum access
+              </div>
+            </div>
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 600,
+                color: tokens.textMuted,
+                padding: '2px 6px',
+                borderRadius: RADIUS.sm,
+                backgroundColor: tokens.surface,
+              }}
+            >
+              100% Offline Capable
+            </span>
+          </div>
+
+          {/* Card 1: Semester Bundle */}
+          <div
+            style={{
+              backgroundColor: tokens.surface,
+              border: `2px solid ${tokens.primary}`,
+              borderRadius: RADIUS.lg,
+              padding: SPACING.md,
+              marginBottom: SPACING.md,
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'flex-start',
+                marginBottom: SPACING.xs,
+              }}
+            >
+              <div>
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    color: tokens.primary,
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  RECOMMENDED · {draft.bundles.SEMESTER_BUNDLE.maxCourses} COURSES
+                </span>
+                <div style={{ fontSize: 16, fontWeight: 700, color: tokens.textPrimary }}>
+                  Semester Bundle
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: 18, fontWeight: 800, color: tokens.primary }}>
+                  {draft.bundles.SEMESTER_BUNDLE.fixedPriceETB} ETB
+                </div>
+                <div style={{ fontSize: 10, color: tokens.textMuted }}>
+                  {draft.bundles.SEMESTER_BUNDLE.durationDays} days access
+                </div>
+              </div>
+            </div>
+            <div style={{ fontSize: 11, color: tokens.textMuted, marginTop: 4 }}>
+              Includes {draft.bundles.SEMESTER_BUNDLE.maxCourses} curriculum courses + modules, notes, Amharic notes, quizzes & exams.
+            </div>
+          </div>
+
+          {/* Card 2: Full Freshman Package */}
+          <div
+            style={{
+              backgroundColor: tokens.surface,
+              border: `1px solid ${tokens.border}`,
+              borderRadius: RADIUS.lg,
+              padding: SPACING.md,
+              marginBottom: SPACING.md,
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'flex-start',
+                marginBottom: SPACING.xs,
+              }}
+            >
+              <div>
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    color: tokens.textMuted,
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  ALL-IN-ONE · FULL YEAR
+                </span>
+                <div style={{ fontSize: 15, fontWeight: 700, color: tokens.textPrimary }}>
+                  Full Freshman Package
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: 16, fontWeight: 800, color: tokens.textPrimary }}>
+                  {draft.bothStreamsPriceETB || 450} ETB
+                </div>
+                <div style={{ fontSize: 10, color: tokens.textMuted }}>
+                  {draft.bothStreamsDurationDays || 180} days access
+                </div>
+              </div>
+            </div>
+            <div style={{ fontSize: 11, color: tokens.textMuted, marginTop: 4 }}>
+              Natural & Social Science streams combined with full archive access.
+            </div>
+          </div>
+
+          {/* Payment Methods Section in Mockup */}
+          <div style={{ marginTop: SPACING.md, marginBottom: SPACING.md }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: tokens.textMuted, marginBottom: 6, textTransform: 'uppercase' }}>
+              Accepted Payment Methods ({draft.paymentMethods.filter((p) => p.isActive).length} Available)
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {draft.paymentMethods.filter((p) => p.isActive).map((pm) => (
+                <div
+                  key={pm.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: `${SPACING.xs}px ${SPACING.sm}px`,
+                    borderRadius: RADIUS.sm,
+                    backgroundColor: tokens.surface,
+                    border: `1px solid ${tokens.border}`,
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: tokens.textPrimary }}>
+                      {pm.providerName}
+                    </div>
+                    <div style={{ fontSize: 10, color: tokens.textMuted }}>
+                      {pm.accountHolderName}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: tokens.primary }}>
+                    {pm.accountNumberOrCode}
+                  </div>
+                </div>
+              ))}
+              {draft.paymentMethods.filter((p) => p.isActive).length === 0 && (
+                <div style={{ fontSize: 11, color: tokens.danger, fontStyle: 'italic', padding: 4 }}>
+                  No active payment methods configured! Students will see an empty payment list.
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Checkout CTA button in Mockup */}
+          <div
+            style={{
+              padding: SPACING.sm,
+              borderRadius: RADIUS.md,
+              backgroundColor: tokens.primary,
+              color: tokens.surface,
+              textAlign: 'center',
+              fontWeight: 700,
+              fontSize: 13,
+            }}
+          >
+            Continue · {draft.bundles.SEMESTER_BUNDLE.fixedPriceETB} ETB
+          </div>
+        </div>
+      </div>
+
       {/* Audit Reason Input (Mandatory per Section 4.3 & Section 6) */}
       {canEdit && (
         <div
