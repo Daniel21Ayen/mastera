@@ -86,10 +86,10 @@ export function BeforeHomeAuthScreens({
   );
 
   // Form Fields
-  const [identifier, setIdentifier] = useState('+251 911 022 344');
-  const [password, setPassword] = useState('password123');
-  const [confirmPassword, setConfirmPassword] = useState('password123');
-  const [fullName, setFullName] = useState('Abebe Kebede');
+  const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [fullName, setFullName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   // University & Program Selections
@@ -738,7 +738,7 @@ export function BeforeHomeAuthScreens({
             <TextInput
               value={fullName}
               onChangeText={setFullName}
-              placeholder="Abebe Kebede"
+              placeholder="Enter your full name"
               placeholderTextColor={tokens.textMuted}
               style={[
                 styles.textInput,
