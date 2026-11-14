@@ -9,6 +9,17 @@ const FORBIDDEN_CODE_PATTERNS = [
   /\bUSE_MOCK_DATA\b/,
   /\b__mocks__\b/,
   /\bpurgeMockStudents\b/i,
+  /\bq-fallback\b/,
+];
+
+const MOBILE_FORBIDDEN_PATTERNS = [
+  { pattern: /['"]Abebe(?:\s+Kebede)?['"]/, reason: "Hardcoded student name 'Abebe'" },
+  { pattern: /['"]MS0001['"]/, reason: "Hardcoded student code 'MS0001'" },
+  { pattern: /200\s*ETB/, reason: "Hardcoded price '200 ETB'" },
+  { pattern: /350\s*ETB/, reason: "Hardcoded price '350 ETB'" },
+  { pattern: /38\s*days\s*left/, reason: "Hardcoded duration '38 days left'" },
+  { pattern: /bundleDaysRemaining\s*=\s*38/, reason: "Hardcoded default bundleDaysRemaining = 38" },
+  { pattern: /pendingOrdersCount\s*=\s*1/, reason: "Hardcoded default pendingOrdersCount = 1" },
 ];
 
 interface MockViolation {
@@ -52,6 +63,17 @@ function scanAppsForMocks(dirPath: string, violations: MockViolation[]): void {
             file: relativePath,
             reason: `Forbidden mock identifier matching ${codePattern}`,
           });
+        }
+      }
+
+      if (relativePath.startsWith('apps/mobile') && !relativePath.endsWith('.d.ts')) {
+        for (const item of MOBILE_FORBIDDEN_PATTERNS) {
+          if (item.pattern.test(content)) {
+            violations.push({
+              file: relativePath,
+              reason: `Forbidden mobile hardcoded literal: ${item.reason}`,
+            });
+          }
         }
       }
     }
