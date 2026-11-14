@@ -1,11 +1,38 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  HttpCode,
+  HttpStatus,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { StudentAuthService } from './student-auth.service';
 
-@Controller('student/auth')
+@Controller('student')
 export class StudentAuthController {
   constructor(private readonly authService: StudentAuthService) {}
 
-  @Post('login')
+  @Get('me/summary')
+  async getStudentSummary(
+    @Headers('x-local-account-id') localAccountIdHeader?: string,
+    @Headers('x-student-code') studentCodeHeader?: string,
+    @Query('localAccountId') localAccountIdQuery?: string,
+    @Query('studentCode') studentCodeQuery?: string,
+    @Query('identifier') identifierQuery?: string
+  ) {
+    const localAccountId = localAccountIdQuery || localAccountIdHeader;
+    const studentCode = studentCodeQuery || studentCodeHeader;
+    const identifier = identifierQuery;
+    return this.authService.getStudentSummary({
+      localAccountId,
+      studentCode,
+      identifier,
+    });
+  }
+
+  @Post('auth/login')
   @HttpCode(HttpStatus.OK)
   async login(
     @Body()
@@ -22,7 +49,7 @@ export class StudentAuthController {
     );
   }
 
-  @Post('request-otp')
+  @Post('auth/request-otp')
   @HttpCode(HttpStatus.OK)
   async requestOtp(@Body() body: { identifier: string }) {
     return {
@@ -31,7 +58,7 @@ export class StudentAuthController {
     };
   }
 
-  @Post('reset-password')
+  @Post('auth/reset-password')
   @HttpCode(HttpStatus.OK)
   async resetPassword(
     @Body()
