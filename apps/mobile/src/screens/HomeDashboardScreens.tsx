@@ -38,12 +38,14 @@ export interface HomeDashboardScreensProps {
   pendingOrdersCount?: number;
   bundleDaysRemaining?: number | null;
   renewalWindowDays?: number; // Default 14 (DR-11)
+  bundlePriceETB?: number;
+  activeCourseTitle?: string;
+  pendingOrderDescription?: string;
   continueLearningCourseTitle?: string;
   continueLearningProgressPercent?: number;
   recentItems?: RecentlyAccessedItem[];
   onOpenMyCourses: () => void;
   onOpenProgressTab: () => void;
-  onOpenCocExam?: () => void;
   onOpenStoreBundles?: () => void;
   onOpenBuyExtras?: () => void;
   onOpenRecentItem?: (item: RecentlyAccessedItem) => void;
@@ -84,15 +86,17 @@ export function HomeDashboardScreens({
   studentFirstName,
   adaptiveStage,
   enrolledCoursesCount,
-  pendingOrdersCount = 1,
-  bundleDaysRemaining = 38,
+  pendingOrdersCount = 0,
+  bundleDaysRemaining = 0,
+  bundlePriceETB,
+  activeCourseTitle,
+  pendingOrderDescription,
   renewalWindowDays = 14,
-  continueLearningCourseTitle = 'Communicative English · Chapter 2',
-  continueLearningProgressPercent = 60,
+  continueLearningCourseTitle = 'Course Overview',
+  continueLearningProgressPercent = 0,
   recentItems = DEFAULT_RECENT_ITEMS,
   onOpenMyCourses,
   onOpenProgressTab,
-  onOpenCocExam,
   onOpenStoreBundles,
   onOpenBuyExtras,
   onOpenRecentItem,
@@ -165,7 +169,7 @@ export function HomeDashboardScreens({
               Receipt under review
             </Text>
             <Text style={[styles.alertCardSubtitle, { color: tokens.textMuted }]}>
-              Semester Bundle · 200 ETB
+              {pendingOrderDescription || `Semester Bundle · ${bundlePriceETB || 150} ETB`}
             </Text>
           </View>
         </View>
@@ -175,7 +179,7 @@ export function HomeDashboardScreens({
 
   // Sub-Screen: Subscription & Store Status
   if (subScreen === 'STORE_STATUS') {
-    const daysLeft = bundleDaysRemaining ?? 38;
+    const daysLeft = bundleDaysRemaining ?? 0;
     const canRenew = daysLeft <= renewalWindowDays;
 
     return (
@@ -227,12 +231,12 @@ export function HomeDashboardScreens({
               Extra courses
             </Text>
             <Text style={[styles.extraCourseName, { color: tokens.textPrimary }]}>
-              Logic
+              {activeCourseTitle || 'Curriculum Courses'}
             </Text>
           </View>
           <View style={[styles.extraPill, { backgroundColor: tokens.primarySoft }]}>
             <Text style={[styles.extraPillText, { color: tokens.primary }]}>
-              38 days left
+              {daysLeft} days left
             </Text>
           </View>
         </View>
@@ -282,7 +286,7 @@ export function HomeDashboardScreens({
       <View style={styles.headerRow}>
         <View style={styles.headerLeft}>
           <Text style={[styles.greetingTitle, { color: tokens.textPrimary }]}>
-            Hello, {studentFirstName || 'Abebe'}
+            Hello, {studentFirstName || 'Student'}
           </Text>
           <Text style={[styles.greetingSubtitle, { color: tokens.textMuted }]}>
             Keep learning, your future is bright!
