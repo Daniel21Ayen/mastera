@@ -51,6 +51,7 @@ import {
   unpackPackageIntoState,
   fetchCoursePackageFromApi,
   fetchLivePaymentMethods,
+  getCandidateHosts,
   RealAppDataState,
 } from './src/core/data/live-catalog-provider';
 
@@ -143,10 +144,103 @@ export default function App(): any {
   // Account and student profile state
   const [accountState, setAccountState] = useState<'LOCAL_ONLY' | 'REGISTERED_REMOTE'>('LOCAL_ONLY');
   const [studentCode, setStudentCode] = useState<string | null>(null);
-  const [studentFullName, setStudentFullName] = useState<string>('Abebe Kebede');
-  const [studentPhone, setStudentPhone] = useState<string>('+251 911 223 344');
-  const [studentEmail, setStudentEmail] = useState<string>('abebe.kebede@student.et');
+  const [studentFullName, setStudentFullName] = useState<string>('');
+  const [studentPhone, setStudentPhone] = useState<string>('');
+  const [studentEmail, setStudentEmail] = useState<string>('');
   const [hasActiveBundle, setHasActiveBundle] = useState<boolean>(false);
+  const [bundleDaysRemaining, setBundleDaysRemaining] = useState<number>(0);
+  const [pendingOrdersCount, setPendingOrdersCount] = useState<number>(0);
+  const [continueLearningPercent, setContinueLearningPercent] = useState<number>(0);
+
+  // Pricing settings from live database config (Phase 3)
+  const [bundlePriceETB, setBundlePriceETB] = useState<number>(150);
+  const [freshmanPriceETB, setFreshmanPriceETB] = useState<number>(350);
+  const [bundleDurationDays, setBundleDurationDays] = useState<number>(150);
+
+  // Load live student summary from database (Phase 2)
+  useEffect(() => {
+    let isCancelled = false;
+    async function loadStudentSummary() {
+      try {
+        const candidateHosts = getCandidateHosts();
+        for (const host of candidateHosts) {
+          try {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 2000);
+            const url =
+              `${host}/student/me/summary` +
+              (studentCode ? `?studentCode=${studentCode}` : '');
+            const res = await fetch(url, { signal: controller.signal });
+            clearTimeout(timer);
+            if (res.ok) {
+              const summary = await res.json();
+              if (!isCancelled && summary) {
+                if (summary.name && summary.name !== 'Student')
+                  setStudentFullName(summary.name);
+                if (summary.studentCode) setStudentCode(summary.studentCode);
+                if (summary.bundleDaysRemaining !== undefined)
+                  setBundleDaysRemaining(summary.bundleDaysRemaining);
+                if (summary.pendingOrdersCount !== undefined)
+                  setPendingOrdersCount(summary.pendingOrdersCount);
+                if (summary.accountState === 'CLAIMED_REGISTERED') {
+                  setAccountState('REGISTERED_REMOTE');
+                  setHasActiveBundle(true);
+                }
+              }
+              break;
+            }
+          } catch {}
+        }
+      } catch {}
+    }
+    loadStudentSummary();
+    return () => {
+      isCancelled = true;
+    };
+  }, [studentCode, activeTab]);
+
+  // Load live pricing settings from commerce pricing config (Phase 3)
+  useEffect(() => {
+    let isCancelled = false;
+    async function loadPricingSettings() {
+      try {
+        const candidateHosts = getCandidateHosts();
+        for (const host of candidateHosts) {
+          try {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 2000);
+            const res = await fetch(`${host}/commerce/settings`, {
+              signal: controller.signal,
+            });
+            clearTimeout(timer);
+            if (res.ok) {
+              const settings = await res.json();
+              if (!isCancelled && settings?.bundles) {
+                if (settings.bundles.semesterBundle?.priceETB) {
+                  setBundlePriceETB(settings.bundles.semesterBundle.priceETB);
+                }
+                if (settings.bundles.semesterBundle?.durationDays) {
+                  setBundleDurationDays(
+                    settings.bundles.semesterBundle.durationDays
+                  );
+                }
+                if (settings.bundles.fullFreshmanPackage?.singleStreamETB) {
+                  setFreshmanPriceETB(
+                    settings.bundles.fullFreshmanPackage.singleStreamETB
+                  );
+                }
+              }
+              break;
+            }
+          } catch {}
+        }
+      } catch {}
+    }
+    loadPricingSettings();
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
 
   // Department-scoped courses: students only get resources for their chosen department
   const departmentScopedCourses = React.useMemo(() => {
@@ -358,7 +452,13 @@ export default function App(): any {
 
   const courseExamSets: ResolvedCatalogRowView<CatalogExamSetMetaDto>[] = selectedCourse
     ? appData.examSets
-        .filter((es) => es.courseId === selectedCourse.id)
+        .filter(
+          (es) =>
+            es.courseId === selectedCourse.id ||
+            (es.category === 'COC' &&
+              (!es.universityId ||
+                es.universityId === academicScope.universityId))
+        )
         .map((es) => ({
           item: es,
           canOpenNow: true,
@@ -522,24 +622,27 @@ export default function App(): any {
           )
         ) : activeTab === 'HOME' ? (
           <HomeDashboardScreens
-            studentFirstName="Abebe"
-            accountState="LOCAL_ONLY"
+            studentFirstName={
+              studentFullName ? studentFullName.split(' ')[0] : 'Student'
+            }
+            accountState={accountState}
             adaptiveStage="SYNCED_ACTIVE"
             enrolledCoursesCount={selectedCourseIds.length}
-            pendingOrdersCount={1}
-            bundleDaysRemaining={38}
+            pendingOrdersCount={pendingOrdersCount}
+            bundleDaysRemaining={bundleDaysRemaining}
+            bundlePriceETB={bundlePriceETB}
+            activeCourseTitle={firstEnrolledCourse?.title}
             renewalWindowDays={14}
-            continueLearningCourseTitle={`${firstEnrolledCourse ? firstEnrolledCourse.title : 'Communicative English'} · Chapter 1`}
-            continueLearningProgressPercent={60}
+            continueLearningCourseTitle={`${
+              firstEnrolledCourse
+                ? firstEnrolledCourse.title
+                : appData.courses[0]?.title || 'Course'
+            } · Chapter 1`}
+            continueLearningProgressPercent={continueLearningPercent}
             recentItems={realRecentItems}
             themeMode={themeMode}
             onOpenMyCourses={() => setActiveTab('COURSES')}
             onOpenProgressTab={() => setActiveTab('PROGRESS')}
-            onOpenCocExam={() => {
-              const firstCourse = appData.courses[0]!;
-              setSelectedCourse(firstCourse);
-              setCourseTopTab('EXAMS');
-            }}
             onOpenStoreBundles={() => {
               setProfileInitialScreen('STORE_CATALOG');
               setActiveTab('PROFILE');
@@ -671,10 +774,11 @@ export default function App(): any {
             onSubmitBundleOrder={(payload) => {
               if (payload.fullName) setStudentFullName(payload.fullName);
               if (payload.phoneNumber) setStudentPhone(payload.phoneNumber);
-              setAccountState('REGISTERED_REMOTE');
-              setStudentCode('MS0001');
-              setHasActiveBundle(true);
+              setPendingOrdersCount((c) => c + 1);
             }}
+            bundlePriceETB={bundlePriceETB}
+            freshmanPackagePriceETB={freshmanPriceETB}
+            bundleDurationDays={bundleDurationDays}
             paymentMethods={
               appData.paymentMethods && appData.paymentMethods.length > 0
                 ? appData.paymentMethods
