@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, CheckCircle2, XCircle, AlertTriangle, ShieldCheck, ZoomIn, ZoomOut } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, XCircle, AlertTriangle, ZoomIn, ZoomOut, Loader2 } from 'lucide-react';
 import { ADMIN_THEMES, RADIUS, SPACING } from '@mastera/ui-tokens';
 import { adminApiFetch, resolveApiBaseUrl } from '@/lib/api-client';
 
@@ -19,29 +19,34 @@ export default function PaymentOrderDetailPage({ params }: PaymentDetailPageProp
   const [zoomLevel, setZoomLevel] = useState(1);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectReason, setRejectReason] = useState('Photo unclear. Fix and resubmit.');
-  const [inputAmount, setInputAmount] = useState('350');
+  const [inputAmount, setInputAmount] = useState('');
   const [isApproved, setIsApproved] = useState(false);
   const [dbOrder, setDbOrder] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
         setLoading(true);
+        setErrorMessage(null);
         const data = await adminApiFetch<any>(`/orders/${params.orderId}`);
         if (mounted && data) {
           setDbOrder(data);
-          if (data.expectedAmountETB) {
+          if (data.expectedAmountETB !== undefined && data.expectedAmountETB !== null) {
             setInputAmount(String(data.expectedAmountETB));
           }
           if (data.status === 'APPROVED') {
             setIsApproved(true);
           }
         }
-      } catch (err) {
-        console.warn('Failed to load live order details:', err);
+      } catch (err: any) {
+        if (mounted) {
+          console.warn('Failed to load live order details:', err);
+          setErrorMessage(err?.message || 'Failed to load order');
+        }
       } finally {
         if (mounted) setLoading(false);
       }
@@ -51,42 +56,10 @@ export default function PaymentOrderDetailPage({ params }: PaymentDetailPageProp
     };
   }, [params.orderId]);
 
-  const profile = dbOrder?.pendingProfile || {};
-  const order = {
-    id: params.orderId,
-    studentName: profile.fullName || dbOrder?.student?.fullName || 'Abebe Bikila',
-    studentCode: dbOrder?.student?.studentCode || 'MS0001',
-    phone: profile.identifier || profile.phone || dbOrder?.student?.identifier || '+251 911 022 344',
-    email: profile.email || dbOrder?.student?.email || 'student@mastera.et',
-    university: profile.universityId || 'Addis Ababa Science & Technology University',
-    department: profile.programId || 'Freshman Engineering',
-    semester: profile.semester || 1,
-    productType: dbOrder?.orderType ? String(dbOrder.orderType).replace(/_/g, ' ') : 'Semester Bundle (5 Courses)',
-    courses: Array.isArray(profile.selectedCourseIds) && profile.selectedCourseIds.length > 0
-      ? profile.selectedCourseIds
-      : [
-          'MATH101 - Applied Mathematics I',
-          'PHYS101 - General Physics I',
-          'CHEM101 - General Chemistry',
-          'ENGL101 - Communicative English Skills',
-          'GEES101 - Introduction to Emerging Technologies',
-        ],
-    expectedAmountETB: dbOrder?.expectedAmountETB ?? 350,
-    paymentMethod: dbOrder?.paymentMethodId
-      ? (dbOrder.paymentMethodId.includes('cbe') ? 'Commercial Bank of Ethiopia (CBE)' : dbOrder.paymentMethodId)
-      : 'Commercial Bank of Ethiopia (CBE)',
-    transactionReference: dbOrder?.transactionReference || 'FT2428909123',
-    accountNumber: '1000123456789 (Mastera Education PLC)',
-    submittedAt: dbOrder?.submittedAt
-      ? dbOrder.submittedAt.replace('T', ' ').slice(0, 19)
-      : '2026-11-22 14:10:00',
-    receiptImageUrl: `${resolveApiBaseUrl()}/orders/${params.orderId}/receipt`,
-    status: isApproved ? 'APPROVED' : (dbOrder?.status || 'PENDING'),
-  };
-
   const handleApprove = async () => {
-    if (Number(inputAmount) !== order.expectedAmountETB) {
-      alert(`Amount entered (${inputAmount} ETB) does not match expected amount (${order.expectedAmountETB} ETB).`);
+    if (!dbOrder) return;
+    if (Number(inputAmount) !== dbOrder.expectedAmountETB) {
+      alert(`Amount entered (${inputAmount} ETB) does not match expected amount (${dbOrder.expectedAmountETB} ETB).`);
       return;
     }
     try {
@@ -120,6 +93,104 @@ export default function PaymentOrderDetailPage({ params }: PaymentDetailPageProp
     } finally {
       setActionLoading(false);
     }
+  };
+
+  // Loading State
+  if (loading) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: 'calc(100vh - 160px)',
+          gap: SPACING.md,
+        }}
+      >
+        <Loader2 size={36} color={tokens.primary} style={{ animation: 'spin 1s linear infinite' }} />
+        <div style={{ fontSize: 16, fontWeight: 600, color: tokens.textPrimary }}>
+          Loading real order details #{params.orderId}...
+        </div>
+        <div style={{ fontSize: 13, color: tokens.textMuted }}>
+          Connecting to Mastera PostgreSQL Orders Database
+        </div>
+      </div>
+    );
+  }
+
+  // Not Found State
+  if (!dbOrder) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: 'calc(100vh - 160px)',
+          gap: SPACING.md,
+        }}
+      >
+        <AlertTriangle size={42} color={tokens.danger} />
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: tokens.danger, margin: 0 }}>
+          Order #{params.orderId} Not Found
+        </h2>
+        <p style={{ fontSize: 13, color: tokens.textMuted, margin: 0 }}>
+          {errorMessage || 'This payment record does not exist in the database.'}
+        </p>
+        <Link
+          href="/commerce/payments"
+          style={{
+            marginTop: SPACING.sm,
+            padding: `${SPACING.sm}px ${SPACING.md}px`,
+            borderRadius: RADIUS.md,
+            backgroundColor: tokens.primary,
+            color: tokens.surface,
+            textDecoration: 'none',
+            fontSize: 13,
+            fontWeight: 600,
+          }}
+        >
+          ← Back to Payments Queue
+        </Link>
+      </div>
+    );
+  }
+
+  const profile = dbOrder.pendingProfile || {};
+  const order = {
+    id: dbOrder.id,
+    studentName: profile.fullName || dbOrder.student?.fullName || 'Not Provided',
+    studentCode: dbOrder.student?.studentCode || 'Pending Assignment (Upon Approval)',
+    phone: profile.identifier || profile.phone || dbOrder.student?.identifier || 'Not Provided',
+    email: profile.email || dbOrder.student?.email || 'N/A',
+    university: dbOrder.universityName || profile.universityName || profile.universityId || 'Not Specified',
+    department: dbOrder.programName || profile.programName || profile.programId || 'Not Specified',
+    semester: profile.semester ? `Semester ${profile.semester}` : 'Semester 1',
+    productType: dbOrder.orderType ? String(dbOrder.orderType).replace(/_/g, ' ') : 'Package Bundle',
+    courses: Array.isArray(dbOrder.courseNames) && dbOrder.courseNames.length > 0
+      ? dbOrder.courseNames
+      : Array.isArray(profile.selectedCourseIds) && profile.selectedCourseIds.length > 0
+      ? profile.selectedCourseIds
+      : ['All Department Scoped Courses'],
+    expectedAmountETB: dbOrder.expectedAmountETB ?? 0,
+    paymentMethod: dbOrder.paymentMethodId
+      ? (dbOrder.paymentMethodId.toLowerCase().includes('cbe')
+          ? 'Commercial Bank of Ethiopia (CBE)'
+          : dbOrder.paymentMethodId.toLowerCase().includes('telebirr')
+          ? 'Telebirr (Ethio Telecom)'
+          : dbOrder.paymentMethodId)
+      : 'Bank Transfer / Mobile Banking',
+    transactionReference: dbOrder.transactionReference || 'N/A',
+    accountNumber: dbOrder.paymentMethodId?.toLowerCase().includes('telebirr')
+      ? '0911223344 (Mastera Education)'
+      : '1000123456789 (Mastera Education PLC)',
+    submittedAt: dbOrder.submittedAt
+      ? dbOrder.submittedAt.replace('T', ' ').slice(0, 19)
+      : 'Just now',
+    receiptImageUrl: `${resolveApiBaseUrl()}/orders/${params.orderId}/receipt`,
+    status: isApproved ? 'APPROVED' : (dbOrder.status || 'PENDING'),
   };
 
   return (
@@ -257,7 +328,7 @@ export default function PaymentOrderDetailPage({ params }: PaymentDetailPageProp
               <div><span style={{ color: tokens.textMuted }}>Phone:</span> {order.phone}</div>
               <div><span style={{ color: tokens.textMuted }}>Email:</span> {order.email}</div>
               <div><span style={{ color: tokens.textMuted }}>Institution:</span> {order.university}</div>
-              <div><span style={{ color: tokens.textMuted }}>Department:</span> {order.department} (Semester {order.semester})</div>
+              <div><span style={{ color: tokens.textMuted }}>Department:</span> {order.department} ({order.semester})</div>
             </div>
           </div>
 

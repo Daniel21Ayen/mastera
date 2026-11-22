@@ -1008,10 +1008,74 @@ export class PrismaOrdersRepository implements OrdersRepositoryPort {
     return this.mapOrder(o);
   }
 
-  async findOrderById(orderId: string): Promise<StoredOrderEntity | null> {
-    const o = await this.prisma.order.findUnique({ where: { id: orderId } });
+  async findOrderById(orderId: string): Promise<any | null> {
+    const o = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { student: true },
+    });
     if (!o) return null;
-    return this.mapOrder(o);
+    const mapped: any = this.mapOrder(o);
+    if (o.student) {
+      mapped.student = this.mapStudent(o.student);
+    }
+
+    const profile = mapped.pendingProfile || {};
+    const uniId = profile.universityId || o.student?.universityId;
+    if (uniId) {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uniId);
+      const u = await this.prisma.university.findFirst({
+        where: {
+          OR: [
+            ...(isUuid ? [{ id: uniId }] : []),
+            { shortName: uniId },
+            { name: uniId },
+          ],
+        },
+      });
+      if (u) {
+        mapped.universityName = `${u.name} (${u.shortName})`;
+      }
+    }
+
+    const progId = profile.programId || o.student?.programId;
+    if (progId) {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(progId);
+      const p = await this.prisma.program.findFirst({
+        where: {
+          OR: [
+            ...(isUuid ? [{ id: progId }] : []),
+            { name: progId },
+          ],
+        },
+      });
+      if (p) {
+        mapped.programName = p.name;
+      }
+    }
+
+    const rawCourseIds: string[] = Array.isArray(profile.selectedCourseIds)
+      ? profile.selectedCourseIds
+      : [];
+    if (rawCourseIds.length > 0) {
+      const isUuid = (val: string) =>
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+      const uuidIds = rawCourseIds.filter(isUuid);
+      const nonUuidCodes = rawCourseIds.filter((id) => !isUuid(id));
+      const conditions: any[] = [];
+      if (uuidIds.length > 0) conditions.push({ id: { in: uuidIds } });
+      if (nonUuidCodes.length > 0) conditions.push({ code: { in: nonUuidCodes } });
+
+      if (conditions.length > 0) {
+        const courses = await this.prisma.course.findMany({
+          where: { OR: conditions },
+        });
+        if (courses.length > 0) {
+          mapped.courseNames = courses.map((c) => `${c.code} - ${c.title}`);
+        }
+      }
+    }
+
+    return mapped;
   }
 
   async countPendingOrdersByIdentifier(identifier: string): Promise<number> {
