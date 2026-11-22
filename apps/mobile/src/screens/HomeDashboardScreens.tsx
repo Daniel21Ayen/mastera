@@ -271,8 +271,8 @@ export function HomeDashboardScreens({
   }
 
   // Main Home Dashboard matching user's exact uploaded design:
-  // Top: "Hello, Abebe" + subtitle + Bell & Avatar badges
-  // Hero: Royal Blue "Continue Learning" with translucent Play ▶ button + 60% progress bar
+  // Top: "Hello, {Student}" + subtitle + Bell & Avatar badges
+  // Hero: Royal Blue "Continue Learning" with translucent Play ▶ button + progress bar
   // Stats: 3 white cards ("My Courses", "Learning Stats", "Store Status") with light-blue square badges
   // COC Exam: Pastel green card with green "C" badge, title, subtitle & chevron >
   // Recently Accessed: "Recently Accessed" + "See all", 3 cards (Calculus I, Grammar, AASTU Mid Exam)
@@ -314,7 +314,7 @@ export function HomeDashboardScreens({
               activeOpacity={0.8}
             >
               <Text style={[styles.avatarInitial, { color: tokens.white }]}>
-                {studentFirstName ? studentFirstName.charAt(0).toUpperCase() : 'A'}
+                {studentFirstName ? studentFirstName.charAt(0).toUpperCase() : 'S'}
               </Text>
             </TouchableOpacity>
         </View>

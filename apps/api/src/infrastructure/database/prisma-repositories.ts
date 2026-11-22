@@ -219,6 +219,28 @@ export class PrismaCatalogRepository implements CatalogRepositoryPort {
     };
   }
 
+  async updateUniversity(
+    universityId: string,
+    patch: Partial<CreateUniversityInput>
+  ): Promise<CatalogUniversityDto> {
+    const data: any = { version: { increment: 1 } };
+    if (patch.name !== undefined) data.name = patch.name;
+    if (patch.shortName !== undefined) data.shortName = patch.shortName;
+    if (patch.isActive !== undefined) data.isActive = patch.isActive;
+
+    const uni = await this.prisma.university.update({
+      where: { id: universityId },
+      data,
+    });
+    return {
+      id: uni.id,
+      name: uni.name,
+      shortName: uni.shortName,
+      isActive: uni.isActive,
+      version: uni.version,
+    };
+  }
+
   async createProgram(data: CreateProgramInput): Promise<CatalogProgramDto> {
     const prog = await this.prisma.program.create({
       data: {
@@ -264,6 +286,28 @@ export class PrismaCatalogRepository implements CatalogRepositoryPort {
         isActive: p.isActive,
         version: p.version,
       })),
+    };
+  }
+
+  async updateProgram(
+    programId: string,
+    patch: Partial<CreateProgramInput>
+  ): Promise<CatalogProgramDto> {
+    const data: any = { version: { increment: 1 } };
+    if (patch.name !== undefined) data.name = patch.name;
+    if (patch.isActive !== undefined) data.isActive = patch.isActive;
+    if (patch.universityId !== undefined) data.universityId = patch.universityId;
+
+    const prog = await this.prisma.program.update({
+      where: { id: programId },
+      data,
+    });
+    return {
+      id: prog.id,
+      universityId: prog.universityId,
+      name: prog.name,
+      isActive: prog.isActive,
+      version: prog.version,
     };
   }
 
@@ -1512,6 +1556,10 @@ export class PrismaContentRepository implements ContentRepositoryPort {
       bookGroupTitle: ch.bookGroup?.title,
     };
   }
+
+  async deleteChapter(id: string): Promise<void> {
+    await this.prisma.content.delete({ where: { id } });
+  }
 }
 
 // --- ASSESSMENT REPOSITORY ---
@@ -1732,6 +1780,27 @@ export class PrismaAssessmentRepository implements AssessmentRepositoryPort {
     const q = await this.prisma.question.update({
       where: { id: questionId },
       data: { displayNumber: newDisplayNumber },
+    });
+    return this.mapQuestion(q);
+  }
+
+  async updateQuestion(
+    id: string,
+    patch: Partial<StoredQuestionRecord>
+  ): Promise<StoredQuestionRecord> {
+    const updateData: any = {};
+    if (patch.promptLatex !== undefined) updateData.promptLatex = patch.promptLatex;
+    if (patch.questionType !== undefined) updateData.questionType = patch.questionType as any;
+    if (patch.options !== undefined) updateData.optionsJson = patch.options as any;
+    if (patch.correctOptionId !== undefined) updateData.correctOptionId = patch.correctOptionId;
+    if (patch.correctBoolean !== undefined) updateData.correctBoolean = patch.correctBoolean;
+    if (patch.acceptedAnswers !== undefined) updateData.acceptedAnswers = patch.acceptedAnswers as any;
+    if (patch.explanationLatex !== undefined) updateData.explanationLatex = patch.explanationLatex;
+    if (patch.status !== undefined) updateData.status = patch.status as any;
+
+    const q = await this.prisma.question.update({
+      where: { id },
+      data: updateData,
     });
     return this.mapQuestion(q);
   }
