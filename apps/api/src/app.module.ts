@@ -53,6 +53,8 @@ import { StudentsDirectoryController } from './modules/students-directory/studen
 import { SupportCommsController } from './modules/support-comms/support-comms.controller';
 import { StudentSyncController } from './modules/sync/sync.controller';
 import { AuditReportsController } from './modules/audit-reports/audit-reports.controller';
+import { AnnouncementsController } from './modules/announcements/announcements.controller';
+import { AnnouncementsService } from './modules/announcements/announcements.service';
 import { AppController } from './app.controller';
 
 @Module({
@@ -73,9 +75,11 @@ import { AppController } from './app.controller';
     SupportCommsController,
     StudentSyncController,
     AuditReportsController,
+    AnnouncementsController,
   ],
   providers: [
     PrismaService,
+    AnnouncementsService,
     S3StorageService,
     RedisCacheService,
     ExpoPushDispatcherService,
@@ -259,6 +263,7 @@ import { AppController } from './app.controller';
     StudentsDirectoryService,
     SupportCommsService,
     StudentSyncService,
+    AnnouncementsService,
   ],
 })
 export class AppModule {}

@@ -133,8 +133,8 @@ export default function ContentQuizTabPage({ params }: QuizTabProps): React.Reac
     try {
       setIsDeleting(true);
       await adminApiFetch(`/assessments/questions/${id}`, { method: 'DELETE' });
-      await loadQuestionBank();
       setDeleteConfirmQuestion(null);
+      await loadQuestionBank();
     } catch (err: any) {
       console.error('Failed to delete question:', err);
       alert(`Failed to delete question: ${err?.message || 'Server error'}`);
