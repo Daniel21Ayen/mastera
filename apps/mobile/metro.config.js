@@ -3,7 +3,7 @@ const http = require('http');
 
 const config = getDefaultConfig(__dirname);
 
-// Transparently proxy all backend API calls through Metro (port 8085 by default).
+// Transparently proxy all backend API calls through Metro (port 8081 by default).
 // This guarantees that mobile devices on local Wi-Fi can communicate with the backend
 // even when host firewalls (e.g., UFW) or router AP client isolation block port 3000.
 const API_PREFIXES = [
@@ -25,7 +25,7 @@ const originalEnhanceMiddleware = config.server?.enhanceMiddleware;
 
 config.server = {
   ...config.server,
-  port: Number(process.env.RCT_METRO_PORT || process.env.EXPO_PORT || 8085),
+  port: Number(process.env.RCT_METRO_PORT || process.env.EXPO_PORT || 8081),
   enhanceMiddleware: (metroMiddleware, server) => {
     return (req, res, next) => {
       const url = req.url || '';
