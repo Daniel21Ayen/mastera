@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Headers,
   Param,
@@ -160,6 +161,15 @@ export class ContentAuthoringController {
     const actor = body.actor || DEFAULT_SUPER_ADMIN;
     const data = body.data ?? body;
     return this.contentService.updateChapter(actor, chapterId, data);
+  }
+
+  @Delete('chapters/:id')
+  async deleteChapter(
+    @Param('id') chapterId: string,
+    @Body() body?: { actor?: AuthenticatedAdminContext }
+  ) {
+    const actor = body?.actor || DEFAULT_SUPER_ADMIN;
+    return this.contentService.deleteChapter(actor, chapterId);
   }
 
   @Post('chapters/:id/submit-for-review')

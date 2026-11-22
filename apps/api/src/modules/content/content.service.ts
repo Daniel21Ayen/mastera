@@ -56,6 +56,7 @@ export interface ContentRepositoryPort {
     id: string,
     patch: Partial<ChapterContentRecord>
   ): Promise<ChapterContentRecord>;
+  deleteChapter?(id: string): Promise<void>;
   bumpCourseContentVersion(courseId: string): Promise<void>;
   listChapters?(filter?: {
     courseId?: string;
@@ -242,6 +243,43 @@ export class ContentAuthoringService {
     });
 
     return updated;
+  }
+
+  async deleteChapter(
+    actor: AuthenticatedAdminContext,
+    chapterId: string
+  ): Promise<void> {
+    const existing = await this.repo.findChapterById(chapterId);
+    if (!existing) {
+      throw new Error('Chapter not found.');
+    }
+
+    const decision = await this.scopeAuth.authorizeAdminAction(
+      actor,
+      'CONTENT_AUTHOR_SCOPED',
+      { courseId: existing.courseId }
+    );
+    if (!decision.allowed) {
+      throw new Error(`${decision.errorCode}: ${decision.reason}`);
+    }
+
+    if (this.repo.deleteChapter) {
+      await this.repo.deleteChapter(chapterId);
+    }
+    await this.repo.bumpCourseContentVersion(existing.courseId);
+
+    await this.auditService.record({
+      actorId: actor.adminId,
+      actorRole: actor.adminRole,
+      action: 'CHAPTER_DELETED',
+      resourceType: 'CONTENT',
+      resourceId: chapterId,
+      previousValue: {
+        title: existing.title,
+        courseId: existing.courseId,
+        category: existing.category,
+      },
+    });
   }
 
   async submitForReview(
