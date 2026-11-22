@@ -65,6 +65,10 @@ export interface UpdateCourseInput {
 
 export interface CatalogRepositoryPort {
   createUniversity(data: CreateUniversityInput): Promise<CatalogUniversityDto>;
+  updateUniversity?(
+    universityId: string,
+    patch: Partial<CreateUniversityInput>
+  ): Promise<CatalogUniversityDto>;
   listUniversities(
     skip: number,
     take: number,
@@ -72,6 +76,10 @@ export interface CatalogRepositoryPort {
   ): Promise<{ items: CatalogUniversityDto[]; total: number }>;
 
   createProgram(data: CreateProgramInput): Promise<CatalogProgramDto>;
+  updateProgram?(
+    programId: string,
+    patch: Partial<CreateProgramInput>
+  ): Promise<CatalogProgramDto>;
   listPrograms(
     skip: number,
     take: number,
@@ -152,7 +160,7 @@ export class AcademicCatalogService {
     const created = await this.repo.createUniversity({
       name: input.name.trim(),
       shortName: input.shortName.trim().toUpperCase(),
-      isActive: input.isActive ?? false, // Default Inactive per UI modal screenshot
+      isActive: input.isActive ?? true,
     });
 
     await this.auditService.record({
@@ -165,6 +173,43 @@ export class AcademicCatalogService {
     });
 
     return created;
+  }
+
+  async updateUniversity(
+    actor: AuthenticatedAdminContext,
+    universityId: string,
+    patch: Partial<CreateUniversityInput>
+  ): Promise<CatalogUniversityDto> {
+    const decision = await this.scopeAuth.authorizeAdminAction(
+      actor,
+      'CATALOG_EDIT_SCOPED',
+      { universityId }
+    );
+    if (!decision.allowed) {
+      throw new Error(`${decision.errorCode}: ${decision.reason}`);
+    }
+
+    if (!this.repo.updateUniversity) {
+      throw new Error('updateUniversity is not implemented by repository');
+    }
+
+    const patchPayload: Partial<CreateUniversityInput> = {};
+    if (patch.name !== undefined) patchPayload.name = patch.name.trim();
+    if (patch.shortName !== undefined) patchPayload.shortName = patch.shortName.trim().toUpperCase();
+    if (patch.isActive !== undefined) patchPayload.isActive = patch.isActive;
+
+    const updated = await this.repo.updateUniversity(universityId, patchPayload);
+
+    await this.auditService.record({
+      actorId: actor.adminId,
+      actorRole: actor.adminRole,
+      action: 'UNIVERSITY_UPDATED' as any,
+      resourceType: 'UNIVERSITY',
+      resourceId: updated.id,
+      newValue: { ...updated },
+    });
+
+    return updated;
   }
 
   async createProgram(
@@ -182,7 +227,7 @@ export class AcademicCatalogService {
     const created = await this.repo.createProgram({
       universityId: input.universityId,
       name: input.name.trim(),
-      isActive: input.isActive ?? false, // Default Inactive per UI modal screenshot
+      isActive: input.isActive ?? true,
     });
 
     await this.auditService.record({
@@ -195,6 +240,43 @@ export class AcademicCatalogService {
     });
 
     return created;
+  }
+
+  async updateProgram(
+    actor: AuthenticatedAdminContext,
+    programId: string,
+    patch: Partial<CreateProgramInput>
+  ): Promise<CatalogProgramDto> {
+    const decision = await this.scopeAuth.authorizeAdminAction(
+      actor,
+      'CATALOG_EDIT_SCOPED',
+      { programId, universityId: patch.universityId }
+    );
+    if (!decision.allowed) {
+      throw new Error(`${decision.errorCode}: ${decision.reason}`);
+    }
+
+    if (!this.repo.updateProgram) {
+      throw new Error('updateProgram is not implemented by repository');
+    }
+
+    const patchPayload: Partial<CreateProgramInput> = {};
+    if (patch.universityId !== undefined) patchPayload.universityId = patch.universityId;
+    if (patch.name !== undefined) patchPayload.name = patch.name.trim();
+    if (patch.isActive !== undefined) patchPayload.isActive = patch.isActive;
+
+    const updated = await this.repo.updateProgram(programId, patchPayload);
+
+    await this.auditService.record({
+      actorId: actor.adminId,
+      actorRole: actor.adminRole,
+      action: 'PROGRAM_UPDATED' as any,
+      resourceType: 'PROGRAM',
+      resourceId: updated.id,
+      newValue: { ...updated },
+    });
+
+    return updated;
   }
 
   async createCourse(
