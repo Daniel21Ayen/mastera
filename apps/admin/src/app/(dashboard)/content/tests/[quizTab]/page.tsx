@@ -143,6 +143,61 @@ export default function ContentQuizTabPage({ params }: QuizTabProps): React.Reac
     }
   };
 
+  const handleUploadCsv = async (
+    csvText: string,
+    targetChapterId?: string,
+    courseId?: string
+  ) => {
+    const base64Content = typeof window !== 'undefined'
+      ? btoa(unescape(encodeURIComponent(csvText)))
+      : Buffer.from(csvText, 'utf-8').toString('base64');
+
+    const normalizedCategory = currentTab.toUpperCase().replace('-', '_');
+
+    const res = await adminApiFetch<{ report: any }>('/questions/csv-dry-run', {
+      method: 'POST',
+      body: {
+        csvContentBase64: base64Content,
+        targetType: 'QUIZ_CHAPTER',
+        targetId: targetChapterId || null,
+        category: normalizedCategory,
+        courseId: courseId || (selectedCourseId !== 'ALL' ? selectedCourseId : null),
+        programId: selectedProgramId !== 'ALL' ? selectedProgramId : null,
+        semester: selectedSemester !== 'ALL' ? selectedSemester : null,
+      },
+    });
+
+    return res.report;
+  };
+
+  const handleCommitImport = async (
+    csvText: string,
+    targetChapterId?: string,
+    courseId?: string
+  ) => {
+    const base64Content = typeof window !== 'undefined'
+      ? btoa(unescape(encodeURIComponent(csvText)))
+      : Buffer.from(csvText, 'utf-8').toString('base64');
+
+    const normalizedCategory = currentTab.toUpperCase().replace('-', '_');
+
+    await adminApiFetch('/questions/csv-import', {
+      method: 'POST',
+      body: {
+        csvContentBase64: base64Content,
+        targetType: 'QUIZ_CHAPTER',
+        targetId: targetChapterId || null,
+        category: normalizedCategory,
+        courseId: courseId || (selectedCourseId !== 'ALL' ? selectedCourseId : null),
+        programId: selectedProgramId !== 'ALL' ? selectedProgramId : null,
+      },
+    });
+
+    setIsCsvModalOpen(false);
+    await loadQuestionBank();
+    alert('Successfully imported quiz questions into database question bank!');
+  };
+
   const loadFilterMetadata = useCallback(async () => {
     try {
       const [progRes, courseRes] = await Promise.all([
@@ -547,19 +602,19 @@ export default function ContentQuizTabPage({ params }: QuizTabProps): React.Reac
       {/* Bulk CSV Import Modal */}
       <BulkCsvImportModal
         isOpen={isCsvModalOpen}
-        targetExamSetOrQuizTitle="Quiz Question Bank"
+        targetExamSetOrQuizTitle={currentLabel}
+        targetType="QUIZ_CHAPTER"
+        availableCourses={courses.map((c) => ({ id: c.id, code: c.code, title: c.title }))}
+        sampleTemplateUrl="/samples/quizzes_sample.csv"
+        sampleCsvContent={`question_type,prompt_latex,option_a,option_b,option_c,option_d,correct_answer,explanation_latex
+MULTIPLE_CHOICE,"Which of the following data structures operates on a First-In, First-Out (FIFO) access policy?","Stack","Queue","Binary Search Tree","Max-Heap",B,"A Queue follows the FIFO principle where elements are enqueued at the rear and dequeued from the front."
+MULTIPLE_CHOICE,"What is the output of the logical expression $(P \\land \\neg P)$ for any boolean truth value of $P$?","Always True (Tautology)","Always False (Contradiction)","Contingent on $P$","Undefined",B,"The conjunction of a proposition and its negation is a logical contradiction and is false under all assignments."
+TRUE_FALSE,"In object-oriented programming, an interface can instantiate concrete objects directly without an implementing class.",True,False,,,FALSE,"Interfaces define contracts and cannot be directly instantiated without a concrete class implementation."
+MULTIPLE_CHOICE,"In communicative English, which grammatical voice places the receiver of the action in the subject position?","Active Voice","Passive Voice","Imperative Voice","Subjunctive Voice",B,"In passive voice (e.g., 'The report was written by John'), the recipient of the action functions as the grammatical subject."
+MULTIPLE_CHOICE,"Solve for $x$: $2^{x + 3} = 32$.","$2$","$3$","$5$","$8$",A,"Since $32 = 2^5$, equate exponents: $x + 3 = 5 \\implies x = 2$."`}
         onClose={() => setIsCsvModalOpen(false)}
-        onUploadCsv={async () => ({
-          valid: true,
-          totalRows: 25,
-          validRowsCount: 25,
-          errors: [],
-        })}
-        onCommitImport={async () => {
-          setIsCsvModalOpen(false);
-          await loadQuestionBank();
-          alert('Successfully imported quiz questions!');
-        }}
+        onUploadCsv={handleUploadCsv}
+        onCommitImport={handleCommitImport}
       />
 
       {/* Question Details Modal */}
