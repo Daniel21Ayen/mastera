@@ -21,6 +21,7 @@ import {
   COURSE_ACCENTS,
 } from '@mastera/ui-tokens';
 import { MasteraIcon } from '../shared/components/MasteraIcon';
+import { getCandidateHosts } from '../core/data/live-catalog-provider';
 
 const STATUS_BAR_HEIGHT = StatusBar.currentHeight ?? 24;
 
@@ -169,6 +170,44 @@ export function ProfileAndStoreScreens({
   const [feedbackMessage, setFeedbackMessage] = useState<string>('');
   const [feedbackContact, setFeedbackContact] = useState<string>('');
   const [feedbackSubmitted, setFeedbackSubmitted] = useState<boolean>(false);
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState<boolean>(false);
+
+  const handleSubmitFeedback = async () => {
+    if (!feedbackMessage.trim()) return;
+    setFeedbackSubmitting(true);
+    try {
+      const candidateHosts = getCandidateHosts();
+      for (const host of candidateHosts) {
+        try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 2000);
+          const res = await fetch(`${host}/support/tickets`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              studentName: fullName || 'Mobile Student',
+              studentCode: studentCode || 'MS-MOBILE',
+              phone: feedbackContact || identifier || '+251 900 000 000',
+              universityAndProgram: `${academicScope.universityName} • ${academicScope.programName}`,
+              categoryLabel: feedbackCategory,
+              subject: `Mobile Feedback: ${feedbackCategory} (${feedbackRating}/5 stars)`,
+              messageBody: feedbackMessage,
+            }),
+            signal: controller.signal,
+          });
+          clearTimeout(timer);
+          if (res.ok) {
+            break;
+          }
+        } catch {
+          // Continue to next host fallback
+        }
+      }
+    } finally {
+      setFeedbackSubmitting(false);
+      setFeedbackSubmitted(true);
+    }
+  };
 
   const tokens = STUDENT_THEMES[themeMode];
 
@@ -1187,24 +1226,20 @@ export function ProfileAndStoreScreens({
 
             {/* Submit button */}
             <TouchableOpacity
-              onPress={() => {
-                if (feedbackMessage.trim()) {
-                  setFeedbackSubmitted(true);
-                }
-              }}
-              disabled={!feedbackMessage.trim()}
+              onPress={handleSubmitFeedback}
+              disabled={!feedbackMessage.trim() || feedbackSubmitting}
               style={[
                 styles.primaryBtn,
                 {
                   backgroundColor: tokens.primary,
-                  opacity: feedbackMessage.trim() ? 1 : 0.6,
+                  opacity: feedbackMessage.trim() && !feedbackSubmitting ? 1 : 0.6,
                   marginTop: SPACING.xs,
                   marginBottom: SPACING.xl,
                 },
               ]}
             >
               <Text style={[styles.primaryBtnText, { color: tokens.surface }]}>
-                Submit Feedback
+                {feedbackSubmitting ? 'Submitting Ticket...' : 'Submit Feedback'}
               </Text>
             </TouchableOpacity>
           </View>
