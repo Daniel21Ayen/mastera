@@ -119,6 +119,20 @@ export class AssessmentsController {
     return this.assessmentsService.createQuestion(actor, data);
   }
 
+  @Put('questions/:id')
+  async updateQuestion(
+    @Param('id') questionId: string,
+    @Body()
+    body: {
+      actor?: AuthenticatedAdminContext;
+      data?: Partial<CreateQuestionInput>;
+    } & Partial<CreateQuestionInput>
+  ) {
+    const actor = body.actor || DEFAULT_SUPER_ADMIN;
+    const data = body.data ?? body;
+    return this.assessmentsService.updateQuestion(actor, questionId, data);
+  }
+
   @Put('questions/:id/number')
   async changeQuestionNumber(
     @Param('id') questionId: string,

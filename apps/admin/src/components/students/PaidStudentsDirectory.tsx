@@ -321,32 +321,65 @@ export function PaidStudentsDirectory({
           }}
         >
           <h3 style={{ marginTop: 0 }}>Course (My Course List)</h3>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <thead>
               <tr
                 style={{
                   backgroundColor: tokens.surfaceSubtle,
                   textAlign: 'left',
                   fontSize: 12,
+                  height: 38,
                 }}
               >
-                <th style={{ padding: SPACING.sm }}>Course</th>
-                <th style={{ padding: SPACING.sm }}>Stream</th>
-                <th style={{ padding: SPACING.sm }}>Access</th>
-                <th style={{ padding: SPACING.sm }}>Expires</th>
+                <th style={{ padding: `0 ${SPACING.sm}px`, width: '40%' }}>Course</th>
+                <th style={{ padding: `0 ${SPACING.sm}px`, width: '20%' }}>Stream</th>
+                <th style={{ padding: `0 ${SPACING.sm}px`, width: '20%' }}>Access</th>
+                <th style={{ padding: `0 ${SPACING.sm}px`, width: '20%' }}>Expires</th>
               </tr>
             </thead>
             <tbody>
               {selectedStudent.enrolledCourses.map((c) => (
                 <tr
                   key={c.courseId}
-                  style={{ borderBottom: `1px solid ${tokens.border}` }}
+                  style={{
+                    borderBottom: `1px solid ${tokens.border}`,
+                    height: 48,
+                    maxHeight: 48,
+                  }}
                 >
-                  <td style={{ padding: SPACING.sm, fontWeight: 500 }}>
-                    {c.courseTitle}
+                  <td
+                    style={{
+                      padding: `0 ${SPACING.sm}px`,
+                      fontWeight: 500,
+                      height: 48,
+                      overflow: 'hidden',
+                      verticalAlign: 'middle',
+                    }}
+                  >
+                    <div
+                      style={{
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                      title={c.courseTitle}
+                    >
+                      {c.courseTitle}
+                    </div>
                   </td>
-                  <td style={{ padding: SPACING.sm }}>{c.stream}</td>
-                  <td style={{ padding: SPACING.sm }}>
+                  <td
+                    style={{
+                      padding: `0 ${SPACING.sm}px`,
+                      height: 48,
+                      verticalAlign: 'middle',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {c.stream}
+                  </td>
+                  <td style={{ padding: `0 ${SPACING.sm}px`, height: 48, verticalAlign: 'middle' }}>
                     <span
                       style={{
                         padding: `2px ${SPACING.sm}px`,
@@ -355,12 +388,24 @@ export function PaidStudentsDirectory({
                         color: tokens.primary,
                         fontSize: 12,
                         fontWeight: 600,
+                        whiteSpace: 'nowrap',
                       }}
                     >
                       {c.accessStatus}
                     </span>
                   </td>
-                  <td style={{ padding: SPACING.sm }}>{c.expiresDateLabel}</td>
+                  <td
+                    style={{
+                      padding: `0 ${SPACING.sm}px`,
+                      height: 48,
+                      verticalAlign: 'middle',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {c.expiresDateLabel}
+                  </td>
                 </tr>
               ))}
             </tbody>

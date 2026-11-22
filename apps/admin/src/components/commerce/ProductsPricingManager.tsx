@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   AdminRole,
   PaymentMethodEntryDto,
@@ -57,13 +57,33 @@ export function ProductsPricingManager({
     bothStreamsPriceETB: settings.bothStreamsPriceETB,
     bothStreamsDurationDays: settings.bothStreamsDurationDays,
     extraCourseTiers: settings.extraCourseTiers,
-    paymentMethods: settings.paymentMethods,
+    paymentMethods: settings.paymentMethods || [],
   });
+
+  // Keep draft synchronized when settings are loaded/refreshed from database
+  useEffect(() => {
+    if (settings) {
+      setDraft({
+        singleCoursesEnabled: settings.singleCoursesEnabled,
+        renewalWindowDays: settings.renewalWindowDays,
+        quoteExpiryMinutes: settings.quoteExpiryMinutes,
+        maxReceiptSizeBytes: settings.maxReceiptSizeBytes,
+        bundles: settings.bundles,
+        bothStreamsPriceETB: settings.bothStreamsPriceETB,
+        bothStreamsDurationDays: settings.bothStreamsDurationDays,
+        extraCourseTiers: settings.extraCourseTiers,
+        paymentMethods: settings.paymentMethods || [],
+      });
+    }
+  }, [settings]);
 
   const [firstChapterModuleFree, setFirstChapterModuleFree] = useState(true);
   const [firstChapterQuizFree, setFirstChapterQuizFree] = useState(true);
   const [cocSampleSetFree, setCocSampleSetFree] = useState(true);
-  const [changeReason, setChangeReason] = useState('');
+  const [changeReason, setChangeReason] = useState('Updated commercial pricing and payment settings');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+  const [saveErrorMsg, setSaveErrorMsg] = useState<string | null>(null);
 
   // Payment Methods Admin CRUD State
   const [editingMethodId, setEditingMethodId] = useState<string | null>(null);
@@ -96,34 +116,67 @@ export function ProductsPricingManager({
     setEditingMethodId(pm.id);
   };
 
-  const handleSaveMethodForm = () => {
+  const handleSaveMethodForm = async () => {
     if (!methodForm.providerName.trim() || !methodForm.accountNumberOrCode.trim()) {
       return;
     }
+    let updatedMethods: PaymentMethodEntryDto[];
     if (isAddingNewMethod) {
-      setDraft((prev) => ({
-        ...prev,
-        paymentMethods: [...prev.paymentMethods, methodForm],
-      }));
+      updatedMethods = [...(draft.paymentMethods || []), methodForm];
       setIsAddingNewMethod(false);
     } else if (editingMethodId) {
-      setDraft((prev) => ({
-        ...prev,
-        paymentMethods: prev.paymentMethods.map((m) =>
-          m.id === editingMethodId ? methodForm : m
-        ),
-      }));
+      updatedMethods = (draft.paymentMethods || []).map((m) =>
+        m.id === editingMethodId ? methodForm : m
+      );
       setEditingMethodId(null);
+    } else {
+      return;
+    }
+    const updatedDraft = {
+      ...draft,
+      paymentMethods: updatedMethods,
+    };
+    setDraft(updatedDraft);
+    const reasonText = isAddingNewMethod
+      ? `Added payment method ${methodForm.providerName}`
+      : `Updated payment method ${methodForm.providerName}`;
+    try {
+      setIsSaving(true);
+      setSaveErrorMsg(null);
+      await onSaveSettings(updatedDraft, reasonText);
+      setSaveSuccessMsg(`Payment method "${methodForm.providerName}" saved to database.`);
+      setTimeout(() => setSaveSuccessMsg(null), 4000);
+    } catch (err: any) {
+      setSaveErrorMsg(err?.message || 'Failed to save payment method to database.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  const handleDeleteMethod = (idToDelete: string) => {
-    setDraft((prev) => ({
-      ...prev,
-      paymentMethods: prev.paymentMethods.filter((m) => m.id !== idToDelete),
-    }));
+  const handleDeleteMethod = async (idToDelete: string) => {
+    const methodToDelete = (draft.paymentMethods || []).find((m) => m.id === idToDelete);
+    const updatedMethods = (draft.paymentMethods || []).filter((m) => m.id !== idToDelete);
+    const updatedDraft = {
+      ...draft,
+      paymentMethods: updatedMethods,
+    };
+    setDraft(updatedDraft);
     if (editingMethodId === idToDelete) {
       setEditingMethodId(null);
+    }
+    try {
+      setIsSaving(true);
+      setSaveErrorMsg(null);
+      await onSaveSettings(
+        updatedDraft,
+        `Deleted payment method ${methodToDelete?.providerName || idToDelete}`
+      );
+      setSaveSuccessMsg('Payment method deleted from database.');
+      setTimeout(() => setSaveSuccessMsg(null), 4000);
+    } catch (err: any) {
+      setSaveErrorMsg(err?.message || 'Failed to delete payment method.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -132,10 +185,21 @@ export function ProductsPricingManager({
   const firstExtraTier = draft.extraCourseTiers[0]?.unitPriceETB ?? 100;
   const laterExtraTier = draft.extraCourseTiers[1]?.unitPriceETB ?? 50;
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canEdit) return;
-    onSaveSettings(draft, changeReason.trim());
+    if (!canEdit || isSaving) return;
+    const reason = changeReason.trim() || 'Updated pricing and commercial settings';
+    try {
+      setIsSaving(true);
+      setSaveErrorMsg(null);
+      await onSaveSettings(draft, reason);
+      setSaveSuccessMsg('Pricing settings saved successfully to database!');
+      setTimeout(() => setSaveSuccessMsg(null), 4000);
+    } catch (err: any) {
+      setSaveErrorMsg(err?.message || 'Failed to save settings.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -152,23 +216,54 @@ export function ProductsPricingManager({
         <h1 style={{ margin: 0, fontSize: 26 }}>Products & Pricing</h1>
 
         {canEdit && (
-          <button
-            type="submit"
-            disabled={changeReason.trim().length < 3}
-            style={{
-              padding: `${SPACING.sm}px ${SPACING.xl}px`,
-              borderRadius: RADIUS.md,
-              border: 'none',
-              backgroundColor: tokens.primary,
-              color: tokens.sidebarText,
-              fontWeight: 600,
-              opacity: changeReason.trim().length < 3 ? 0.6 : 1,
-              cursor:
-                changeReason.trim().length < 3 ? 'not-allowed' : 'pointer',
-            }}
-          >
-            Save changes
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: SPACING.md }}>
+            {saveSuccessMsg && (
+              <span
+                style={{
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: tokens.success,
+                  backgroundColor: tokens.successBg,
+                  padding: `${SPACING.xs}px ${SPACING.md}px`,
+                  borderRadius: RADIUS.sm,
+                  border: `1px solid ${tokens.success}`,
+                }}
+              >
+                ✓ {saveSuccessMsg}
+              </span>
+            )}
+            {saveErrorMsg && (
+              <span
+                style={{
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: tokens.danger,
+                  backgroundColor: tokens.dangerBg,
+                  padding: `${SPACING.xs}px ${SPACING.md}px`,
+                  borderRadius: RADIUS.sm,
+                  border: `1px solid ${tokens.danger}`,
+                }}
+              >
+                ✕ {saveErrorMsg}
+              </span>
+            )}
+            <button
+              type="submit"
+              disabled={isSaving}
+              style={{
+                padding: `${SPACING.sm}px ${SPACING.xl}px`,
+                borderRadius: RADIUS.md,
+                border: 'none',
+                backgroundColor: isSaving ? tokens.textMuted : tokens.primary,
+                color: tokens.sidebarText,
+                fontWeight: 600,
+                opacity: isSaving ? 0.7 : 1,
+                cursor: isSaving ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {isSaving ? 'Saving...' : 'Save changes'}
+            </button>
+          </div>
         )}
       </div>
 

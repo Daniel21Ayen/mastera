@@ -123,20 +123,20 @@ export default function CommercePricingPage(): React.ReactElement {
           actor: {
             adminId: 'admin-super-1',
             adminRole: 'SUPER_ADMIN',
+            isActive: true,
+            canReviewAndPublish: true,
+            scopes: [],
           },
           settings: nextSettings,
-          reason,
+          reason: reason || 'Updated pricing and commercial settings',
         },
       });
       if (updated) {
         setSettings(updated);
       }
     } catch (err) {
-      console.warn('Direct PUT /commerce/settings error, applying local state update:', err);
-      setSettings((prev) => ({
-        ...nextSettings,
-        configVersion: prev.configVersion + 1,
-      }));
+      console.error('Error saving commerce settings to backend:', err);
+      throw err;
     }
   };
 

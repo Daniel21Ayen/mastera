@@ -71,8 +71,140 @@ export default function App(): any {
     'HOME' | 'COURSES' | 'PROGRESS' | 'PROFILE'
   >('HOME');
 
+  // Academic scope state (University, Department, Semester, Stream)
+  const [academicScope, setAcademicScope] = useState<AcademicScopeState>({
+    universityId: 'BDU',
+    universityName: 'BDU - Bahir Dar University',
+    programId: 'FRESHMAN',
+    programName: 'Freshman Department',
+    semester: 'Semester 1',
+    stream: 'Natural',
+  });
+
+  // Account and student profile state
+  const [accountState, setAccountState] = useState<'LOCAL_ONLY' | 'REGISTERED_REMOTE'>('LOCAL_ONLY');
+  const [studentCode, setStudentCode] = useState<string | null>(null);
+  const [studentFullName, setStudentFullName] = useState<string>('');
+  const [studentPhone, setStudentPhone] = useState<string>('');
+  const [studentEmail, setStudentEmail] = useState<string>('');
+  const [hasActiveBundle, setHasActiveBundle] = useState<boolean>(false);
+  const [bundleDaysRemaining, setBundleDaysRemaining] = useState<number>(0);
+  const [pendingOrdersCount, setPendingOrdersCount] = useState<number>(0);
+  const [continueLearningPercent, setContinueLearningPercent] = useState<number>(0);
+
+  // Learning progress & statistics (Phase 2 & Phase 4)
+  const [renewalWindowDays, setRenewalWindowDays] = useState<number>(14);
+  const [overallMasteryPercent, setOverallMasteryPercent] = useState<number>(0);
+  const [completedChaptersTotal, setCompletedChaptersTotal] = useState<number>(0);
+  const [totalChaptersCount, setTotalChaptersCount] = useState<number>(0);
+  const [quizzesPassedCount, setQuizzesPassedCount] = useState<number>(0);
+  const [streakDays, setStreakDays] = useState<number>(0);
+
+  // Pricing settings from live database config (Phase 3)
+  const [bundlePriceETB, setBundlePriceETB] = useState<number>(150);
+  const [freshmanPriceETB, setFreshmanPriceETB] = useState<number>(350);
+  const [bundleDurationDays, setBundleDurationDays] = useState<number>(150);
+
+  // Reusable loader for live pricing settings from commerce pricing config
+  const loadPricingSettings = React.useCallback(async () => {
+    try {
+      const candidateHosts = getCandidateHosts();
+      for (const host of candidateHosts) {
+        try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 2000);
+          const res = await fetch(`${host}/commerce/settings`, {
+            signal: controller.signal,
+          });
+          clearTimeout(timer);
+          if (res.ok) {
+            const settings = await res.json();
+            if (settings?.bundles) {
+              const sem =
+                settings.bundles.SEMESTER_BUNDLE ||
+                settings.bundles.semesterBundle;
+              const full =
+                settings.bundles.FULL_COURSE_BUNDLE ||
+                settings.bundles.fullFreshmanPackage;
+
+              const semPrice = sem?.fixedPriceETB ?? sem?.priceETB;
+              if (typeof semPrice === 'number' && semPrice > 0) {
+                setBundlePriceETB(semPrice);
+              }
+              const semDuration = sem?.durationDays;
+              if (typeof semDuration === 'number' && semDuration > 0) {
+                setBundleDurationDays(semDuration);
+              }
+              const fullPrice =
+                full?.fixedPriceETB ??
+                full?.singleStreamETB ??
+                full?.priceETB ??
+                settings.bothStreamsPriceETB;
+              if (typeof fullPrice === 'number' && fullPrice > 0) {
+                setFreshmanPriceETB(fullPrice);
+              }
+              if (settings.renewalWindowDays) {
+                setRenewalWindowDays(settings.renewalWindowDays);
+              }
+            }
+            if (settings?.paymentMethods && Array.isArray(settings.paymentMethods)) {
+              setAppData((prev) => ({
+                ...prev,
+                paymentMethods: settings.paymentMethods,
+              }));
+            }
+            break;
+          }
+        } catch {}
+      }
+    } catch {}
+  }, []);
+
+  // Reusable loader for live student summary from database (Phase 2)
+  const loadStudentSummary = React.useCallback(async () => {
+    try {
+      const candidateHosts = getCandidateHosts();
+      for (const host of candidateHosts) {
+        try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 2000);
+          const url =
+            `${host}/student/me/summary` +
+            (studentCode ? `?studentCode=${studentCode}` : '');
+          const res = await fetch(url, { signal: controller.signal });
+          clearTimeout(timer);
+          if (res.ok) {
+            const summary = await res.json();
+            if (summary) {
+              if (summary.name && summary.name !== 'Student')
+                setStudentFullName(summary.name);
+              if (summary.studentCode) setStudentCode(summary.studentCode);
+              if (summary.bundleDaysRemaining !== undefined)
+                setBundleDaysRemaining(summary.bundleDaysRemaining);
+              if (summary.pendingOrdersCount !== undefined)
+                setPendingOrdersCount(summary.pendingOrdersCount);
+              if ((summary as any).overallMasteryPercent !== undefined)
+                setOverallMasteryPercent((summary as any).overallMasteryPercent);
+              if ((summary as any).completedChaptersTotal !== undefined)
+                setCompletedChaptersTotal((summary as any).completedChaptersTotal);
+              if ((summary as any).streakDays !== undefined)
+                setStreakDays((summary as any).streakDays);
+              if ((summary as any).quizzesPassedCount !== undefined)
+                setQuizzesPassedCount((summary as any).quizzesPassedCount);
+              if (summary.accountState === 'CLAIMED_REGISTERED') {
+                setAccountState('REGISTERED_REMOTE');
+                setHasActiveBundle(true);
+              }
+            }
+            break;
+          }
+        } catch {}
+      }
+    } catch {}
+  }, [studentCode]);
+
   // Continuous live database synchronization:
-  // Dynamically syncs universities, programs, courses, chapters, exams, and payment methods from PostgreSQL
+  // Dynamically syncs universities, programs, courses, chapters, exams, pricing, and payment methods from PostgreSQL
   useEffect(() => {
     let isCancelled = false;
 
@@ -99,12 +231,14 @@ export default function App(): any {
       } catch {
         // Fallback to local offline cache
       }
+      loadPricingSettings();
+      loadStudentSummary();
     }
 
     syncFromDatabase();
 
-    // Check for database updates every 60s while active (Phase 5: saves battery and data)
-    const interval = setInterval(syncFromDatabase, 60000);
+    // Check for database updates every 30s while active (Phase 5: fast sync for admin updates)
+    const interval = setInterval(syncFromDatabase, 30000);
 
     // Also trigger immediate sync when app returns to foreground
     const appStateSub = AppState.addEventListener('change', (nextState) => {
@@ -118,138 +252,7 @@ export default function App(): any {
       clearInterval(interval);
       appStateSub.remove();
     };
-  }, []);
-
-  // Synchronize payment methods dynamically whenever student accesses Profile/Store or on interval
-  useEffect(() => {
-    let isCancelled = false;
-    async function refreshPaymentMethods() {
-      try {
-        const methods = await fetchLivePaymentMethods();
-        if (!isCancelled && methods && methods.length > 0) {
-          setAppData((prev) => ({
-            ...prev,
-            paymentMethods: methods,
-          }));
-        }
-      } catch {}
-    }
-    refreshPaymentMethods();
-    return () => {
-      isCancelled = true;
-    };
-  }, [activeTab, profileInitialScreen]);
-
-  // Academic scope state (University, Department, Semester, Stream)
-  const [academicScope, setAcademicScope] = useState<AcademicScopeState>({
-    universityId: 'BDU',
-    universityName: 'BDU - Bahir Dar University',
-    programId: 'FRESHMAN',
-    programName: 'Freshman Department',
-    semester: 'Semester 1',
-    stream: 'Natural',
-  });
-
-  // Account and student profile state
-  const [accountState, setAccountState] = useState<'LOCAL_ONLY' | 'REGISTERED_REMOTE'>('LOCAL_ONLY');
-  const [studentCode, setStudentCode] = useState<string | null>(null);
-  const [studentFullName, setStudentFullName] = useState<string>('');
-  const [studentPhone, setStudentPhone] = useState<string>('');
-  const [studentEmail, setStudentEmail] = useState<string>('');
-  const [hasActiveBundle, setHasActiveBundle] = useState<boolean>(false);
-  const [bundleDaysRemaining, setBundleDaysRemaining] = useState<number>(0);
-  const [pendingOrdersCount, setPendingOrdersCount] = useState<number>(0);
-  const [continueLearningPercent, setContinueLearningPercent] = useState<number>(0);
-
-  // Pricing settings from live database config (Phase 3)
-  const [bundlePriceETB, setBundlePriceETB] = useState<number>(150);
-  const [freshmanPriceETB, setFreshmanPriceETB] = useState<number>(350);
-  const [bundleDurationDays, setBundleDurationDays] = useState<number>(150);
-
-  // Load live student summary from database (Phase 2)
-  useEffect(() => {
-    let isCancelled = false;
-    async function loadStudentSummary() {
-      try {
-        const candidateHosts = getCandidateHosts();
-        for (const host of candidateHosts) {
-          try {
-            const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), 2000);
-            const url =
-              `${host}/student/me/summary` +
-              (studentCode ? `?studentCode=${studentCode}` : '');
-            const res = await fetch(url, { signal: controller.signal });
-            clearTimeout(timer);
-            if (res.ok) {
-              const summary = await res.json();
-              if (!isCancelled && summary) {
-                if (summary.name && summary.name !== 'Student')
-                  setStudentFullName(summary.name);
-                if (summary.studentCode) setStudentCode(summary.studentCode);
-                if (summary.bundleDaysRemaining !== undefined)
-                  setBundleDaysRemaining(summary.bundleDaysRemaining);
-                if (summary.pendingOrdersCount !== undefined)
-                  setPendingOrdersCount(summary.pendingOrdersCount);
-                if (summary.accountState === 'CLAIMED_REGISTERED') {
-                  setAccountState('REGISTERED_REMOTE');
-                  setHasActiveBundle(true);
-                }
-              }
-              break;
-            }
-          } catch {}
-        }
-      } catch {}
-    }
-    loadStudentSummary();
-    return () => {
-      isCancelled = true;
-    };
-  }, [studentCode, activeTab]);
-
-  // Load live pricing settings from commerce pricing config (Phase 3)
-  useEffect(() => {
-    let isCancelled = false;
-    async function loadPricingSettings() {
-      try {
-        const candidateHosts = getCandidateHosts();
-        for (const host of candidateHosts) {
-          try {
-            const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), 2000);
-            const res = await fetch(`${host}/commerce/settings`, {
-              signal: controller.signal,
-            });
-            clearTimeout(timer);
-            if (res.ok) {
-              const settings = await res.json();
-              if (!isCancelled && settings?.bundles) {
-                if (settings.bundles.semesterBundle?.priceETB) {
-                  setBundlePriceETB(settings.bundles.semesterBundle.priceETB);
-                }
-                if (settings.bundles.semesterBundle?.durationDays) {
-                  setBundleDurationDays(
-                    settings.bundles.semesterBundle.durationDays
-                  );
-                }
-                if (settings.bundles.fullFreshmanPackage?.singleStreamETB) {
-                  setFreshmanPriceETB(
-                    settings.bundles.fullFreshmanPackage.singleStreamETB
-                  );
-                }
-              }
-              break;
-            }
-          } catch {}
-        }
-      } catch {}
-    }
-    loadPricingSettings();
-    return () => {
-      isCancelled = true;
-    };
-  }, []);
+  }, [activeTab, profileInitialScreen, loadPricingSettings, loadStudentSummary]);
 
   // Department-scoped courses: students only get resources for their chosen department
   const departmentScopedCourses = React.useMemo(() => {
@@ -641,7 +644,7 @@ export default function App(): any {
             bundleDaysRemaining={bundleDaysRemaining}
             bundlePriceETB={bundlePriceETB}
             activeCourseTitle={firstEnrolledCourse?.title}
-            renewalWindowDays={14}
+            renewalWindowDays={renewalWindowDays}
             continueLearningCourseTitle={`${
               firstEnrolledCourse
                 ? firstEnrolledCourse.title
@@ -714,33 +717,31 @@ export default function App(): any {
         ) : activeTab === 'PROGRESS' ? (
           <ProgressTabScreens
             accountState={accountState}
-            overallMasteryPercent={68}
-            completedChaptersTotal={14}
-            totalChaptersCount={28}
-            quizzesPassedCount={12}
-            streakDays={5}
-            weeklyActivityHeights={[30, 50, 70, 40, 85, 60, 20]}
+            overallMasteryPercent={overallMasteryPercent}
+            completedChaptersTotal={completedChaptersTotal}
+            totalChaptersCount={
+              totalChaptersCount ||
+              departmentScopedCourses.reduce(
+                (sum, c) => sum + (appData.chaptersByBookId[c.id]?.length || 0),
+                0
+              )
+            }
+            quizzesPassedCount={quizzesPassedCount}
+            streakDays={streakDays}
+            weeklyActivityHeights={[0, 0, 0, 0, 0, 0, 0]}
             themeMode={themeMode}
             onBrowseCourses={() => setActiveTab('COURSES')}
             onOpenReviewAttempt={() => {}}
-            coursesProgress={departmentScopedCourses.slice(0, 3).map((c, i) => ({
+            coursesProgress={departmentScopedCourses.map((c) => ({
               courseId: c.id,
               courseTitle: c.title,
-              completedChapters: i === 0 ? 6 : i === 1 ? 4 : 2,
-              totalChapters: 8,
-              avgQuizPercent: i === 0 ? 80 : i === 1 ? 65 : 50,
-              masteryPercent: i === 0 ? 75 : i === 1 ? 60 : 45,
-              isSavedOffline: true,
+              completedChapters: 0,
+              totalChapters: appData.chaptersByBookId[c.id]?.length || 0,
+              avgQuizPercent: 0,
+              masteryPercent: 0,
+              isSavedOffline: downloadedCourseIds.includes(c.id),
             }))}
-            pastAttempts={[
-              {
-                attemptId: 'att-1',
-                title: 'Calculus I Mid-Semester 2024 · AASTU',
-                dateAndDurationLabel: '2 days ago · 45 mins',
-                scoreLabel: '18/20',
-                passed: true,
-              },
-            ]}
+            pastAttempts={[]}
           />
         ) : (
           <ProfileAndStoreScreens

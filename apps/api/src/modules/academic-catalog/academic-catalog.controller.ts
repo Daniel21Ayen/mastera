@@ -57,9 +57,23 @@ export class AcademicCatalogController {
       data?: CreateUniversityInput;
     } & CreateUniversityInput
   ) {
-    const actor = body.actor ?? DEFAULT_SUPER_ADMIN;
+    const actor = { ...DEFAULT_SUPER_ADMIN, ...(body.actor ?? {}), isActive: true };
     const data = body.data ?? body;
     return this.catalogService.createUniversity(actor, data);
+  }
+
+  @Put('universities/:id')
+  async updateUniversity(
+    @Param('id') universityId: string,
+    @Body()
+    body: {
+      actor?: AuthenticatedAdminContext;
+      data?: Partial<CreateUniversityInput>;
+    } & Partial<CreateUniversityInput>
+  ) {
+    const actor = { ...DEFAULT_SUPER_ADMIN, ...(body.actor ?? {}), isActive: true };
+    const data = body.data ?? body;
+    return this.catalogService.updateUniversity(actor, universityId, data);
   }
 
   @Get('programs')
@@ -90,9 +104,23 @@ export class AcademicCatalogController {
       data?: CreateProgramInput;
     } & CreateProgramInput
   ) {
-    const actor = body.actor ?? DEFAULT_SUPER_ADMIN;
+    const actor = { ...DEFAULT_SUPER_ADMIN, ...(body.actor ?? {}), isActive: true };
     const data = body.data ?? body;
     return this.catalogService.createProgram(actor, data);
+  }
+
+  @Put('programs/:id')
+  async updateProgram(
+    @Param('id') programId: string,
+    @Body()
+    body: {
+      actor?: AuthenticatedAdminContext;
+      data?: Partial<CreateProgramInput>;
+    } & Partial<CreateProgramInput>
+  ) {
+    const actor = { ...DEFAULT_SUPER_ADMIN, ...(body.actor ?? {}), isActive: true };
+    const data = body.data ?? body;
+    return this.catalogService.updateProgram(actor, programId, data);
   }
 
   @Get('courses')

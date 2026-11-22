@@ -2,10 +2,11 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { Plus, HelpCircle, FileSpreadsheet, Layers, CheckCircle2, Filter, Eye } from 'lucide-react';
+import { Plus, HelpCircle, FileSpreadsheet, Layers, CheckCircle2, Filter, Eye, Edit3, Trash2 } from 'lucide-react';
 import { ADMIN_THEMES, RADIUS, SPACING } from '@mastera/ui-tokens';
 import { ExamCategory, CatalogCourseDto, CatalogUniversityDto, CatalogProgramDto } from '@mastera/contracts';
 import { PaginatedTable } from '@/components/shared/PaginatedTable';
+import { RowActionMenu } from '@/components/shared/RowActionMenu';
 import { BuildExamSetModal } from '@/components/assessments/AssessmentBuilders';
 import { BulkCsvImportModal } from '@/components/shared/BulkCsvImportModal';
 import { adminApiFetch } from '@/lib/api-client';
@@ -56,6 +57,84 @@ export default function QuestionsExamTypePage({ params }: ExamTypeProps): React.
   const [isBuildSetModalOpen, setIsBuildSetModalOpen] = useState(false);
   const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
   const [selectedQuestion, setSelectedQuestion] = useState<QuestionBankRow | null>(null);
+
+  // Edit Question State
+  const [editingQuestion, setEditingQuestion] = useState<QuestionBankRow | null>(null);
+  const [editPromptLatex, setEditPromptLatex] = useState('');
+  const [editExplanationLatex, setEditExplanationLatex] = useState('');
+  const [editOptions, setEditOptions] = useState<{ id: string; textLatex: string }[]>([]);
+  const [editCorrectOptionId, setEditCorrectOptionId] = useState('');
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  // Delete Question State
+  const [deleteConfirmQuestion, setDeleteConfirmQuestion] = useState<QuestionBankRow | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleOpenEdit = (q: QuestionBankRow) => {
+    setEditingQuestion(q);
+    setEditPromptLatex(q.promptLatex);
+    setEditExplanationLatex(q.explanationLatex || '');
+    setEditOptions(
+      q.options && q.options.length > 0
+        ? JSON.parse(JSON.stringify(q.options))
+        : [
+            { id: 'opt_1', textLatex: '' },
+            { id: 'opt_2', textLatex: '' },
+            { id: 'opt_3', textLatex: '' },
+            { id: 'opt_4', textLatex: '' },
+          ]
+    );
+    setEditCorrectOptionId(q.correctOptionId || (q.options?.[0]?.id || ''));
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingQuestion) return;
+    try {
+      setIsSavingEdit(true);
+      await adminApiFetch(`/assessments/questions/${editingQuestion.id}`, {
+        method: 'PUT',
+        body: {
+          promptLatex: editPromptLatex,
+          explanationLatex: editExplanationLatex,
+          options: editOptions,
+          correctOptionId: editCorrectOptionId || null,
+        },
+      });
+      setQuestions((prev) =>
+        prev.map((item) =>
+          item.id === editingQuestion.id
+            ? {
+                ...item,
+                promptLatex: editPromptLatex,
+                explanationLatex: editExplanationLatex,
+                options: editOptions,
+                correctOptionId: editCorrectOptionId || null,
+              }
+            : item
+        )
+      );
+      setEditingQuestion(null);
+    } catch (err: any) {
+      console.error('Failed to update question:', err);
+      alert(`Failed to save question: ${err?.message || 'Server error'}`);
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  const handleDeleteQuestion = async (id: string) => {
+    try {
+      setIsDeleting(true);
+      await adminApiFetch(`/assessments/questions/${id}`, { method: 'DELETE' });
+      await loadQuestionBank();
+      setDeleteConfirmQuestion(null);
+    } catch (err: any) {
+      console.error('Failed to delete question:', err);
+      alert(`Failed to delete question: ${err?.message || 'Server error'}`);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   // Filter metadata from real DB
   const [universities, setUniversities] = useState<CatalogUniversityDto[]>([]);
@@ -293,26 +372,14 @@ export default function QuestionsExamTypePage({ params }: ExamTypeProps): React.
     {
       key: 'actions',
       header: 'Actions',
+      width: 70,
+      align: 'center' as const,
       render: (q: QuestionBankRow) => (
-        <button
-          type="button"
-          onClick={() => setSelectedQuestion(q)}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 4,
-            padding: '4px 8px',
-            borderRadius: RADIUS.sm,
-            border: `1px solid ${tokens.border}`,
-            backgroundColor: tokens.surface,
-            color: tokens.primary,
-            fontSize: 12,
-            cursor: 'pointer',
-            fontWeight: 500,
-          }}
-        >
-          <Eye size={12} strokeWidth={2} /> View
-        </button>
+        <RowActionMenu
+          onView={() => setSelectedQuestion(q)}
+          onEdit={() => handleOpenEdit(q)}
+          onDelete={() => setDeleteConfirmQuestion(q)}
+        />
       ),
     },
   ];
@@ -741,6 +808,322 @@ export default function QuestionsExamTypePage({ params }: ExamTypeProps): React.
                 }}
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Question Modal */}
+      {editingQuestion && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: 24,
+          }}
+          onClick={() => !isSavingEdit && setEditingQuestion(null)}
+        >
+          <div
+            style={{
+              backgroundColor: tokens.surface,
+              borderRadius: RADIUS.lg,
+              padding: SPACING.xl,
+              maxWidth: 640,
+              width: '100%',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: SPACING.md,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: SPACING.sm }}>
+                <div
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: RADIUS.md,
+                    backgroundColor: tokens.surfaceSubtle,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: tokens.primary,
+                  }}
+                >
+                  <Edit3 size={16} />
+                </div>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: tokens.textPrimary }}>
+                  Edit Question #{editingQuestion.displayNumber} ({editingQuestion.examSetCode || currentCategory})
+                </h3>
+              </div>
+              <button
+                type="button"
+                disabled={isSavingEdit}
+                onClick={() => setEditingQuestion(null)}
+                style={{
+                  border: 'none',
+                  background: 'none',
+                  fontSize: 18,
+                  cursor: isSavingEdit ? 'not-allowed' : 'pointer',
+                  color: tokens.textMuted,
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Prompt LaTeX */}
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: tokens.textPrimary, marginBottom: 4 }}>
+                Question Prompt (LaTeX Supported)
+              </label>
+              <textarea
+                value={editPromptLatex}
+                onChange={(e) => setEditPromptLatex(e.target.value)}
+                rows={3}
+                style={{
+                  width: '100%',
+                  padding: SPACING.sm,
+                  borderRadius: RADIUS.md,
+                  border: `1px solid ${tokens.border}`,
+                  fontSize: 13,
+                  fontFamily: 'inherit',
+                  boxSizing: 'border-box',
+                  resize: 'vertical',
+                }}
+                placeholder="Enter exam question prompt..."
+              />
+            </div>
+
+            {/* Options */}
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: tokens.textPrimary, marginBottom: 6 }}>
+                Answer Options (select the radio button next to the correct answer)
+              </label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: SPACING.xs }}>
+                {editOptions.map((opt, idx) => {
+                  const optLetter = String.fromCharCode(65 + idx);
+                  const isCorrect = opt.id === editCorrectOptionId;
+                  return (
+                    <div
+                      key={opt.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: SPACING.sm,
+                        padding: '6px 10px',
+                        borderRadius: RADIUS.md,
+                        border: `1px solid ${isCorrect ? tokens.success : tokens.border}`,
+                        backgroundColor: isCorrect ? tokens.successBg : tokens.surface,
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        id={`opt_radio_exam_${opt.id}`}
+                        name="correctExamOptionRadio"
+                        checked={isCorrect}
+                        onChange={() => setEditCorrectOptionId(opt.id)}
+                        style={{ cursor: 'pointer' }}
+                      />
+                      <label
+                        htmlFor={`opt_radio_exam_${opt.id}`}
+                        style={{
+                          fontWeight: 700,
+                          fontSize: 12,
+                          color: isCorrect ? tokens.success : tokens.textPrimary,
+                          cursor: 'pointer',
+                          minWidth: 20,
+                        }}
+                      >
+                        {optLetter}.
+                      </label>
+                      <input
+                        type="text"
+                        value={opt.textLatex}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setEditOptions((prev) =>
+                            prev.map((o) => (o.id === opt.id ? { ...o, textLatex: val } : o))
+                          );
+                        }}
+                        style={{
+                          flex: 1,
+                          padding: '4px 8px',
+                          borderRadius: RADIUS.sm,
+                          border: `1px solid ${tokens.border}`,
+                          fontSize: 13,
+                          backgroundColor: tokens.surface,
+                        }}
+                        placeholder={`Option ${optLetter} text...`}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Explanation LaTeX */}
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: tokens.textPrimary, marginBottom: 4 }}>
+                Explanation & Solution (LaTeX Supported)
+              </label>
+              <textarea
+                value={editExplanationLatex}
+                onChange={(e) => setEditExplanationLatex(e.target.value)}
+                rows={3}
+                style={{
+                  width: '100%',
+                  padding: SPACING.sm,
+                  borderRadius: RADIUS.md,
+                  border: `1px solid ${tokens.border}`,
+                  fontSize: 13,
+                  fontFamily: 'inherit',
+                  boxSizing: 'border-box',
+                  resize: 'vertical',
+                }}
+                placeholder="Enter step-by-step solution / explanation..."
+              />
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: SPACING.sm, marginTop: SPACING.xs }}>
+              <button
+                type="button"
+                disabled={isSavingEdit}
+                onClick={() => setEditingQuestion(null)}
+                style={{
+                  padding: `${SPACING.sm}px ${SPACING.lg}px`,
+                  borderRadius: RADIUS.md,
+                  border: `1px solid ${tokens.border}`,
+                  backgroundColor: tokens.surface,
+                  color: tokens.textPrimary,
+                  fontWeight: 600,
+                  fontSize: 13,
+                  cursor: isSavingEdit ? 'not-allowed' : 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isSavingEdit}
+                onClick={handleSaveEdit}
+                style={{
+                  padding: `${SPACING.sm}px ${SPACING.lg}px`,
+                  borderRadius: RADIUS.md,
+                  border: 'none',
+                  backgroundColor: tokens.primary,
+                  color: tokens.surface,
+                  fontWeight: 600,
+                  fontSize: 13,
+                  cursor: isSavingEdit ? 'not-allowed' : 'pointer',
+                  opacity: isSavingEdit ? 0.7 : 1,
+                }}
+              >
+                {isSavingEdit ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Question Confirmation Modal */}
+      {deleteConfirmQuestion && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: 24,
+          }}
+          onClick={() => !isDeleting && setDeleteConfirmQuestion(null)}
+        >
+          <div
+            style={{
+              backgroundColor: tokens.surface,
+              borderRadius: RADIUS.lg,
+              padding: SPACING.xl,
+              maxWidth: 480,
+              width: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: SPACING.md,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: SPACING.sm }}>
+              <div
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: RADIUS.pill,
+                  backgroundColor: '#fee2e2',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#dc2626',
+                }}
+              >
+                <Trash2 size={18} />
+              </div>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: tokens.textPrimary }}>
+                Delete Question #{deleteConfirmQuestion.displayNumber}?
+              </h3>
+            </div>
+
+            <p style={{ margin: 0, fontSize: 13, color: tokens.textMuted, lineHeight: 1.5 }}>
+              Are you sure you want to delete question #{deleteConfirmQuestion.displayNumber} (&quot;
+              {deleteConfirmQuestion.promptLatex.slice(0, 80)}...&quot;)?
+              Subsequent questions in this set will be automatically renumbered to maintain a continuous 1..N order.
+            </p>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: SPACING.sm, marginTop: SPACING.sm }}>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setDeleteConfirmQuestion(null)}
+                style={{
+                  padding: `${SPACING.sm}px ${SPACING.lg}px`,
+                  borderRadius: RADIUS.md,
+                  border: `1px solid ${tokens.border}`,
+                  backgroundColor: tokens.surface,
+                  color: tokens.textPrimary,
+                  fontWeight: 600,
+                  fontSize: 13,
+                  cursor: isDeleting ? 'not-allowed' : 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => handleDeleteQuestion(deleteConfirmQuestion.id)}
+                style={{
+                  padding: `${SPACING.sm}px ${SPACING.lg}px`,
+                  borderRadius: RADIUS.md,
+                  border: 'none',
+                  backgroundColor: '#dc2626',
+                  color: '#ffffff',
+                  fontWeight: 600,
+                  fontSize: 13,
+                  cursor: isDeleting ? 'not-allowed' : 'pointer',
+                  opacity: isDeleting ? 0.7 : 1,
+                }}
+              >
+                {isDeleting ? 'Deleting...' : 'Delete Question'}
               </button>
             </div>
           </div>
