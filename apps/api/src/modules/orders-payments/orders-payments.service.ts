@@ -403,13 +403,16 @@ export class OrdersPaymentsService {
         });
       }
 
-      const coveredCourseIds = order.quoteSnapshot.perCourseBreakdown.map(
-        (item) => item.courseId
-      );
+      const coveredCourseIds =
+        order.quoteSnapshot.perCourseBreakdown &&
+        order.quoteSnapshot.perCourseBreakdown.length > 0
+          ? order.quoteSnapshot.perCourseBreakdown.map((item) => item.courseId)
+          : order.pendingProfile.selectedCourseIds || [];
 
       const createdEntitlements = await this.repo.insertEntitlementsInTx(
         tx,
         coveredCourseIds.map((courseId) => ({
+          studentId: student.id,
           orderId: order.id,
           courseId,
           productType: order.orderType,

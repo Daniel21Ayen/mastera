@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { PaymentsReviewManager, PaymentQueueRowDto } from '@/components/commerce/PaymentsReviewManager';
 import { PaginatedResponseDto, RefundRecordDto } from '@mastera/contracts';
-import { adminApiFetch } from '@/lib/api-client';
+import { adminApiFetch, resolveApiBaseUrl } from '@/lib/api-client';
 
 export default function CommercePaymentsPage(): React.ReactElement {
   const [currentPage, setCurrentPage] = useState(1);
@@ -32,9 +32,7 @@ export default function CommercePaymentsPage(): React.ReactElement {
             submittedDateLabel: ord.submittedAt ? ord.submittedAt.replace('T', ' ').slice(0, 19) : '2026-11-07 14:00:00',
             durationDays: ord.durationDays || 120,
             status: ord.status || 'PENDING',
-            receiptSignedUrl: ord.receiptStorageKey
-              ? `https://images.unsplash.com/photo-1554415707-9e4466759538?w=800&auto=format&fit=crop&q=80`
-              : 'https://images.unsplash.com/photo-1554415707-9e4466759538?w=800&auto=format&fit=crop&q=80',
+            receiptSignedUrl: `${resolveApiBaseUrl()}/orders/${ord.id}/receipt`,
           };
         });
         setOrders(rows);

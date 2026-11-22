@@ -12,3 +12,5 @@ yarn-error.log*
 .env.production
 .DS_Store
 *.tsbuildinfo
+apps/api/data/
+data/

@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, CheckCircle2, XCircle, AlertTriangle, ShieldCheck, ZoomIn, ZoomOut } from 'lucide-react';
 import { ADMIN_THEMES, RADIUS, SPACING } from '@mastera/ui-tokens';
+import { adminApiFetch, resolveApiBaseUrl } from '@/lib/api-client';
 
 interface PaymentDetailPageProps {
   params: {
@@ -18,41 +19,107 @@ export default function PaymentOrderDetailPage({ params }: PaymentDetailPageProp
   const [zoomLevel, setZoomLevel] = useState(1);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectReason, setRejectReason] = useState('Photo unclear. Fix and resubmit.');
-  const [inputAmount, setInputAmount] = useState('270');
+  const [inputAmount, setInputAmount] = useState('350');
   const [isApproved, setIsApproved] = useState(false);
+  const [dbOrder, setDbOrder] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
 
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        setLoading(true);
+        const data = await adminApiFetch<any>(`/orders/${params.orderId}`);
+        if (mounted && data) {
+          setDbOrder(data);
+          if (data.expectedAmountETB) {
+            setInputAmount(String(data.expectedAmountETB));
+          }
+          if (data.status === 'APPROVED') {
+            setIsApproved(true);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to load live order details:', err);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [params.orderId]);
+
+  const profile = dbOrder?.pendingProfile || {};
   const order = {
     id: params.orderId,
-    studentName: 'Abebe Bikila',
-    studentCode: 'MS0001',
-    phone: '+251 911 022 344',
-    email: 'abebe@aastu.edu.et',
-    university: 'Addis Ababa Science & Technology University',
-    department: 'Freshman Engineering',
-    semester: 1,
-    productType: 'Semester Bundle (5 Courses)',
-    courses: [
-      'MATH101 - Applied Mathematics I',
-      'PHYS101 - General Physics I',
-      'CHEM101 - General Chemistry',
-      'ENGL101 - Communicative English Skills',
-      'GEES101 - Introduction to Emerging Technologies',
-    ],
-    expectedAmountETB: 270,
-    paymentMethod: 'Commercial Bank of Ethiopia (CBE)',
-    transactionReference: 'FT2428909123',
+    studentName: profile.fullName || dbOrder?.student?.fullName || 'Abebe Bikila',
+    studentCode: dbOrder?.student?.studentCode || 'MS0001',
+    phone: profile.identifier || profile.phone || dbOrder?.student?.identifier || '+251 911 022 344',
+    email: profile.email || dbOrder?.student?.email || 'student@mastera.et',
+    university: profile.universityId || 'Addis Ababa Science & Technology University',
+    department: profile.programId || 'Freshman Engineering',
+    semester: profile.semester || 1,
+    productType: dbOrder?.orderType ? String(dbOrder.orderType).replace(/_/g, ' ') : 'Semester Bundle (5 Courses)',
+    courses: Array.isArray(profile.selectedCourseIds) && profile.selectedCourseIds.length > 0
+      ? profile.selectedCourseIds
+      : [
+          'MATH101 - Applied Mathematics I',
+          'PHYS101 - General Physics I',
+          'CHEM101 - General Chemistry',
+          'ENGL101 - Communicative English Skills',
+          'GEES101 - Introduction to Emerging Technologies',
+        ],
+    expectedAmountETB: dbOrder?.expectedAmountETB ?? 350,
+    paymentMethod: dbOrder?.paymentMethodId
+      ? (dbOrder.paymentMethodId.includes('cbe') ? 'Commercial Bank of Ethiopia (CBE)' : dbOrder.paymentMethodId)
+      : 'Commercial Bank of Ethiopia (CBE)',
+    transactionReference: dbOrder?.transactionReference || 'FT2428909123',
     accountNumber: '1000123456789 (Mastera Education PLC)',
-    submittedAt: '2024-11-06 14:10:00',
-    receiptImageUrl: 'https://images.unsplash.com/photo-1554415707-9e4466759538?w=1000&auto=format&fit=crop&q=80',
-    status: isApproved ? 'APPROVED' : 'PENDING',
+    submittedAt: dbOrder?.submittedAt
+      ? dbOrder.submittedAt.replace('T', ' ').slice(0, 19)
+      : '2026-11-22 14:10:00',
+    receiptImageUrl: `${resolveApiBaseUrl()}/orders/${params.orderId}/receipt`,
+    status: isApproved ? 'APPROVED' : (dbOrder?.status || 'PENDING'),
   };
 
-  const handleApprove = () => {
+  const handleApprove = async () => {
     if (Number(inputAmount) !== order.expectedAmountETB) {
       alert(`Amount entered (${inputAmount} ETB) does not match expected amount (${order.expectedAmountETB} ETB).`);
       return;
     }
-    setIsApproved(true);
+    try {
+      setActionLoading(true);
+      await adminApiFetch(`/orders/${params.orderId}/approve`, {
+        method: 'POST',
+        body: { verifiedAmountETB: Number(inputAmount) },
+      });
+      setIsApproved(true);
+      alert('Payment receipt approved and student access granted successfully!');
+      router.push('/commerce/payments');
+    } catch (err: any) {
+      alert(`Failed to approve order: ${err?.message || 'Server error'}`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleReject = async () => {
+    try {
+      setActionLoading(true);
+      await adminApiFetch(`/orders/${params.orderId}/reject`, {
+        method: 'POST',
+        body: { reason: rejectReason },
+      });
+      setShowRejectModal(false);
+      alert('Payment receipt marked rejected and student notified.');
+      router.push('/commerce/payments');
+    } catch (err: any) {
+      alert(`Failed to reject order: ${err?.message || 'Server error'}`);
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   return (
@@ -140,6 +207,7 @@ export default function PaymentOrderDetailPage({ params }: PaymentDetailPageProp
               />
               <button
                 type="button"
+                disabled={actionLoading}
                 onClick={handleApprove}
                 style={{
                   padding: `${SPACING.sm}px ${SPACING.md}px`,
@@ -149,14 +217,15 @@ export default function PaymentOrderDetailPage({ params }: PaymentDetailPageProp
                   color: tokens.surface,
                   fontSize: 13,
                   fontWeight: 600,
-                  cursor: 'pointer',
+                  cursor: actionLoading ? 'not-allowed' : 'pointer',
+                  opacity: actionLoading ? 0.7 : 1,
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: SPACING.xs,
                 }}
               >
                 <CheckCircle2 size={16} strokeWidth={2} />
-                Verify & Approve
+                {actionLoading ? 'Approving...' : 'Verify & Approve'}
               </button>
             </div>
           </div>
@@ -199,7 +268,7 @@ export default function PaymentOrderDetailPage({ params }: PaymentDetailPageProp
             <div style={{ marginTop: SPACING.sm, fontSize: 13 }}>
               <div style={{ fontWeight: 600, color: tokens.primary }}>{order.productType}</div>
               <ul style={{ margin: `${SPACING.xs}px 0 0 0`, paddingLeft: 18, color: tokens.textMuted, fontSize: 12 }}>
-                {order.courses.map((c, i) => (
+                {order.courses.map((c: string, i: number) => (
                   <li key={i}>{c}</li>
                 ))}
               </ul>
@@ -371,10 +440,8 @@ export default function PaymentOrderDetailPage({ params }: PaymentDetailPageProp
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setShowRejectModal(false);
-                  router.push('/commerce/payments');
-                }}
+                disabled={actionLoading}
+                onClick={handleReject}
                 style={{
                   padding: `${SPACING.sm}px ${SPACING.md}px`,
                   borderRadius: RADIUS.md,
@@ -382,10 +449,11 @@ export default function PaymentOrderDetailPage({ params }: PaymentDetailPageProp
                   backgroundColor: tokens.danger,
                   color: tokens.surface,
                   fontWeight: 600,
-                  cursor: 'pointer',
+                  cursor: actionLoading ? 'not-allowed' : 'pointer',
+                  opacity: actionLoading ? 0.7 : 1,
                 }}
               >
-                Send Rejection SMS
+                {actionLoading ? 'Processing...' : 'Send Rejection SMS'}
               </button>
             </div>
           </div>
