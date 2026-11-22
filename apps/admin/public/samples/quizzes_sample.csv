@@ -4,3 +4,4 @@ MULTIPLE_CHOICE,"What is the output of the logical expression $(P \land \neg P)$
 TRUE_FALSE,"In object-oriented programming, an interface can instantiate concrete objects directly without an implementing class.",True,False,,,FALSE,"Interfaces define contracts and cannot be directly instantiated without a concrete class implementation."
 MULTIPLE_CHOICE,"In communicative English, which grammatical voice places the receiver of the action in the subject position?","Active Voice","Passive Voice","Imperative Voice","Subjunctive Voice",B,"In passive voice (e.g., 'The report was written by John'), the recipient of the action functions as the grammatical subject."
 MULTIPLE_CHOICE,"Solve for $x$: $2^{x + 3} = 32$.","$2$","$3$","$5$","$8$",A,"Since $32 = 2^5$, equate exponents: $x + 3 = 5 \implies x = 2$."
+

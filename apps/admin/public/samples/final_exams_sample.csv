@@ -4,3 +4,4 @@ MULTIPLE_CHOICE,"What is the determinant of the $2 \times 2$ matrix $M = \begin{
 MULTIPLE_CHOICE,"For a spontaneous chemical process at constant temperature and pressure, which thermodynamic criterion must hold?",$\Delta G > 0$,$\Delta G = 0$,$\Delta G < 0$,$\Delta H > 0$,C,"A process is thermodynamically spontaneous at constant temperature and pressure when the Gibbs free energy change $\Delta G < 0$."
 TRUE_FALSE,"Eigenvalues of a real symmetric matrix are always guaranteed to be real numbers.",True,False,,,TRUE,"By the Spectral Theorem, every real symmetric matrix has exclusively real eigenvalues."
 MULTIPLE_CHOICE,"Which of the following represents the general solution to the differential equation $\frac{dy}{dx} = 3y$?",$y = C e^{3x}$,$y = 3x + C$,$y = C e^{-3x}$,$y = \ln(3x) + C$,A,"Separating variables gives $\int \frac{dy}{y} = \int 3 dx \implies \ln|y| = 3x + C_1 \implies y = C e^{3x}$."
+

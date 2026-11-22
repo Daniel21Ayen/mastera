@@ -4,3 +4,4 @@ MULTIPLE_CHOICE,"If $\lim_{x \to 0} \frac{\sin(kx)}{x} = 5$, what is the numeric
 MULTIPLE_CHOICE,"A block of mass $m = 4\text{ kg}$ is subjected to a net horizontal force of $F = 20\text{ N}$. What is the acceleration of the block?",$2\text{ m/s}^2$,$5\text{ m/s}^2$,$16\text{ m/s}^2$,$80\text{ m/s}^2$,B,"According to Newton's Second Law $F = ma$, the acceleration is $a = \frac{F}{m} = \frac{20\text{ N}}{4\text{ kg}} = 5\text{ m/s}^2$."
 TRUE_FALSE,"The integral of an odd continuous function over a symmetric interval $[-a, a]$ is always zero.",True,False,,,TRUE,"For any odd function $f(-x) = -f(x)$, $\int_{-a}^{a} f(x) dx = 0$ by antisymmetry."
 TRUE_FALSE,"A system in static equilibrium can possess a non-zero net external torque.",True,False,,,FALSE,"Static equilibrium requires both $\sum \vec{F} = 0$ and $\sum \vec{\tau} = 0$ about any pivot."
+
