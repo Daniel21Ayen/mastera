@@ -243,6 +243,7 @@ export default function QuestionsExamTypePage({ params }: ExamTypeProps): React.
         },
       });
       await loadQuestionBank();
+      await loadExamSets();
       setIsBuildSetModalOpen(false);
       alert(`Exam Set "${payload.examSetCode}" created successfully in database!`);
     } catch (err: any) {
@@ -250,6 +251,115 @@ export default function QuestionsExamTypePage({ params }: ExamTypeProps): React.
       alert(`Failed to build exam set: ${err?.message || 'Server error'}`);
       setIsBuildSetModalOpen(false);
     }
+  };
+
+  const [examSets, setExamSets] = useState<{ id: string; title: string; examSetCode: string }[]>([]);
+
+  const loadExamSets = useCallback(async () => {
+    try {
+      const res = await adminApiFetch<any[]>(`/assessments/exam-sets?category=${currentCategory}`);
+      if (Array.isArray(res)) {
+        setExamSets(res.map((s) => ({ id: s.id, title: s.title, examSetCode: s.examSetCode })));
+      }
+    } catch (err) {
+      console.error('Failed to load exam sets:', err);
+    }
+  }, [currentCategory]);
+
+  useEffect(() => {
+    loadExamSets();
+  }, [loadExamSets]);
+
+  const handleUploadCsv = async (
+    csvText: string,
+    targetSetId?: string,
+    courseId?: string
+  ) => {
+    const base64Content = typeof window !== 'undefined'
+      ? btoa(unescape(encodeURIComponent(csvText)))
+      : Buffer.from(csvText, 'utf-8').toString('base64');
+
+    const res = await adminApiFetch<{ report: any }>('/questions/csv-dry-run', {
+      method: 'POST',
+      body: {
+        csvContentBase64: base64Content,
+        targetType: 'EXAM_SET',
+        targetId: targetSetId || null,
+        category: currentCategory,
+        courseId: courseId || (selectedCourseId !== 'ALL' ? selectedCourseId : null),
+        universityId: selectedUniversityId !== 'ALL' ? selectedUniversityId : null,
+        programId: selectedProgramId !== 'ALL' ? selectedProgramId : null,
+        year: selectedYear !== 'ALL' ? selectedYear : null,
+      },
+    });
+
+    return res.report;
+  };
+
+  const handleCommitImport = async (
+    csvText: string,
+    targetSetId?: string,
+    courseId?: string
+  ) => {
+    const base64Content = typeof window !== 'undefined'
+      ? btoa(unescape(encodeURIComponent(csvText)))
+      : Buffer.from(csvText, 'utf-8').toString('base64');
+
+    await adminApiFetch('/questions/csv-import', {
+      method: 'POST',
+      body: {
+        csvContentBase64: base64Content,
+        targetType: 'EXAM_SET',
+        targetId: targetSetId || null,
+        category: currentCategory,
+        courseId: courseId || (selectedCourseId !== 'ALL' ? selectedCourseId : null),
+        universityId: selectedUniversityId !== 'ALL' ? selectedUniversityId : null,
+        programId: selectedProgramId !== 'ALL' ? selectedProgramId : null,
+        year: selectedYear !== 'ALL' ? selectedYear : null,
+      },
+    });
+
+    setIsCsvModalOpen(false);
+    await loadQuestionBank();
+    await loadExamSets();
+    alert('Successfully imported questions into database question bank!');
+  };
+
+  const sampleTemplateUrl = `/samples/${
+    examType === 'final-exams'
+      ? 'final_exams_sample.csv'
+      : examType === 'mock-exams'
+      ? 'mock_exams_sample.csv'
+      : examType === 'coc-exams'
+      ? 'coc_exams_sample.csv'
+      : 'mid_exams_sample.csv'
+  }`;
+
+  const sampleCsvMap: Record<string, string> = {
+    'mid-exams': `question_type,prompt_latex,option_a,option_b,option_c,option_d,correct_answer,explanation_latex
+MULTIPLE_CHOICE,"What is the derivative of $f(x) = \\sin(x^2)$ with respect to $x$?",$\\cos(x^2)$,$2x \\cos(x^2)$,$2x \\sin(x^2)$,$-2x \\cos(x^2)$,B,"Applying the chain rule $\\frac{d}{dx}[f(g(x))] = f'(g(x))g'(x)$, with $g(x) = x^2$ and $f(u) = \\sin(u)$, we get $2x \\cos(x^2)$."
+MULTIPLE_CHOICE,"If $\\lim_{x \\to 0} \\frac{\\sin(kx)}{x} = 5$, what is the numerical value of constant $k$?",$0$,$1$,$5$,$\\frac{1}{5}$,C,"Since $\\lim_{x \\to 0} \\frac{\\sin(ax)}{x} = a$, setting $a = k = 5$ gives the limit directly."
+MULTIPLE_CHOICE,"A block of mass $m = 4\\text{ kg}$ is subjected to a net horizontal force of $F = 20\\text{ N}$. What is the acceleration of the block?",$2\\text{ m/s}^2$,$5\\text{ m/s}^2$,$16\\text{ m/s}^2$,$80\\text{ m/s}^2$,B,"According to Newton's Second Law $F = ma$, the acceleration is $a = \\frac{F}{m} = \\frac{20\\text{ N}}{4\\text{ kg}} = 5\\text{ m/s}^2$."
+TRUE_FALSE,"The integral of an odd continuous function over a symmetric interval $[-a, a]$ is always zero.",True,False,,,TRUE,"For any odd function $f(-x) = -f(x)$, $\\int_{-a}^{a} f(x) dx = 0$ by antisymmetry."
+TRUE_FALSE,"A system in static equilibrium can possess a non-zero net external torque.",True,False,,,FALSE,"Static equilibrium requires both $\\sum \\vec{F} = 0$ and $\\sum \\vec{\\tau} = 0$ about any pivot."`,
+    'final-exams': `question_type,prompt_latex,option_a,option_b,option_c,option_d,correct_answer,explanation_latex
+MULTIPLE_CHOICE,"Evaluate the definite integral $\\int_{0}^{1} x e^{x} dx$ using integration by parts.",$1$,$e - 1$,$e$,$2$,A,"Using $\\int u dv = uv - \\int v du$ with $u = x, dv = e^x dx$: $[x e^x]_0^1 - \\int_0^1 e^x dx = e - (e - 1) = 1$."
+MULTIPLE_CHOICE,"What is the determinant of the $2 \\times 2$ matrix $M = \\begin{bmatrix} 3 & 4 \\\\ 2 & 5 \\end{bmatrix}$?",$7$,$15$,$23$,$22$,A,"The determinant is $\\det(M) = (3)(5) - (4)(2) = 15 - 8 = 7$."
+MULTIPLE_CHOICE,"For a spontaneous chemical process at constant temperature and pressure, which thermodynamic criterion must hold?",$\\Delta G > 0$,$\\Delta G = 0$,$\\Delta G < 0$,$\\Delta H > 0$,C,"A process is thermodynamically spontaneous at constant temperature and pressure when the Gibbs free energy change $\\Delta G < 0$."
+TRUE_FALSE,"Eigenvalues of a real symmetric matrix are always guaranteed to be real numbers.",True,False,,,TRUE,"By the Spectral Theorem, every real symmetric matrix has exclusively real eigenvalues."
+MULTIPLE_CHOICE,"Which of the following represents the general solution to the differential equation $\\frac{dy}{dx} = 3y$?",$y = C e^{3x}$,$y = 3x + C$,$y = C e^{-3x}$,$y = \\ln(3x) + C$,A,"Separating variables gives $\\int \\frac{dy}{y} = \\int 3 dx \\implies \\ln|y| = 3x + C_1 \\implies y = C e^{3x}$."`,
+    'mock-exams': `question_type,prompt_latex,option_a,option_b,option_c,option_d,correct_answer,explanation_latex
+MULTIPLE_CHOICE,"According to categorical logic, what is the contradictory proposition to ""All S are P"" (A-type proposition)?","Some S are P (I-type)","No S are P (E-type)","Some S are not P (O-type)","All non-S are P",C,"In the Traditional Square of Opposition, the contradictory of universal affirmative (A) is particular negative (O)."
+MULTIPLE_CHOICE,"የኢትዮጵያ ታላቁ ህዳሴ ግድብ (GERD) በየትኛው ወንዝ ተፋሰስ ላይ ተገነባ?","አባይ (Abay / Blue Nile)","ተከዜ (Tekeze)","አዋሽ (Awash)","ባሮ (Baro)",A,"የታላቁ የኢትዮጵያ ህዳሴ ግድብ በቤኒሻንጉል ጉሙዝ ክልል በአባይ ወንዝ ላይ የተገነባ የሃይድሮ ኤሌክትሪክ ማመንጫ ነው።"
+MULTIPLE_CHOICE,"In relational database design, which normal form eliminates transitive functional dependencies on the primary key?",$1\\text{NF}$,$2\\text{NF}$,$3\\text{NF}$,$\\text{BCNF}$,C,"Third Normal Form (3NF) requires 2NF and mandates that no non-prime attribute is transitively dependent on the primary key."
+TRUE_FALSE,"A deductive argument with all true premises and a false conclusion can still be valid.",True,False,,,FALSE,"By definition of deductive validity, it is impossible for all premises to be true and the conclusion false simultaneously."
+MULTIPLE_CHOICE,"In Ethiopian macroeconomics, what does the National Bank of Ethiopia (NBE) regulate as its primary mandate?","Agricultural export volumes","Monetary policy and price stability","Federal regional tax collection","Infrastructure construction",B,"The National Bank of Ethiopia is the central bank responsible for monetary policy, inflation management, and financial system stability."`,
+    'coc-exams': `question_type,prompt_latex,option_a,option_b,option_c,option_d,correct_answer,explanation_latex
+MULTIPLE_CHOICE,"In electrical occupational standards, what is the calculated total current drawn by a $220\\text{ V}$ circuit supplying three parallel $100\\text{ W}$ resistive loads?",$0.45\\text{ A}$,$1.36\\text{ A}$,$2.20\\text{ A}$,$4.54\\text{ A}$,B,"Total power $P = 3 \\times 100\\text{ W} = 300\\text{ W}$. Using $I = \\frac{P}{V} = \\frac{300}{220} \\approx 1.36\\text{ A}$."
+MULTIPLE_CHOICE,"When performing preventive maintenance on hydraulic machinery, what is the primary diagnostic sign of hydraulic fluid aeration?","Dark brown fluid discoloration","Spongy actuator response and foaming in reservoir","Higher fluid viscosity at operating temperature","Decreased pump audible noise",B,"Aeration introduces air bubbles into hydraulic fluid, creating a spongy/erratic cylinder response and observable foam."
+TRUE_FALSE,"Personal Protective Equipment (PPE) is considered the first line of defense in the occupational hierarchy of hazard controls.",True,False,,,FALSE,"Under OSHA and international occupational safety standards, elimination and engineering controls precede PPE, which is the last line of defense."
+MULTIPLE_CHOICE,"In software development competency assessments, which HTTP response status code must be returned following the successful creation of a new database resource?","200 OK","201 Created","204 No Content","202 Accepted",B,"RFC 7231 specifies 201 Created as the standard response when an HTTP POST successfully creates one or more new resources."
+MULTIPLE_CHOICE,"According to accounting standards, what is the correct journal entry to record depreciation of office equipment?","Debit Equipment, Credit Cash","Debit Accumulated Depreciation, Credit Depreciation Expense","Debit Depreciation Expense, Credit Accumulated Depreciation","Debit Cash, Credit Equipment",C,"Depreciation expense is recognized on the income statement with a debit, while accumulated depreciation (contra-asset) is credited."`,
   };
 
   // Filter program choices based on selected university
@@ -693,18 +803,14 @@ export default function QuestionsExamTypePage({ params }: ExamTypeProps): React.
       <BulkCsvImportModal
         isOpen={isCsvModalOpen}
         targetExamSetOrQuizTitle={currentLabel}
+        targetType="EXAM_SET"
+        availableExamSets={examSets}
+        availableCourses={courses.map((c) => ({ id: c.id, code: c.code, title: c.title }))}
+        sampleTemplateUrl={sampleTemplateUrl}
+        sampleCsvContent={sampleCsvMap[examType] || sampleCsvMap['mid-exams']}
         onClose={() => setIsCsvModalOpen(false)}
-        onUploadCsv={async () => ({
-          valid: true,
-          totalRows: 25,
-          validRowsCount: 25,
-          errors: [],
-        })}
-        onCommitImport={async () => {
-          setIsCsvModalOpen(false);
-          await loadQuestionBank();
-          alert('Successfully imported exam questions into database question bank!');
-        }}
+        onUploadCsv={handleUploadCsv}
+        onCommitImport={handleCommitImport}
       />
 
       {/* Question Details Modal */}
