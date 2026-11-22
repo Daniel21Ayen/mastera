@@ -8,7 +8,9 @@ import {
   StyleSheet,
   StatusBar,
   Alert,
+  Image,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import {
   CatalogCourseDto,
   PaymentMethodEntryDto,
@@ -23,6 +25,14 @@ import {
 } from '@mastera/ui-tokens';
 import { MasteraIcon } from '../shared/components/MasteraIcon';
 import { getCandidateHosts } from '../core/data/live-catalog-provider';
+
+export interface PickedReceiptImage {
+  uri: string;
+  base64?: string | undefined;
+  fileName?: string | undefined;
+  fileSize?: number | undefined;
+  mimeType?: string | undefined;
+}
 
 const STATUS_BAR_HEIGHT = StatusBar.currentHeight ?? 24;
 
@@ -82,9 +92,13 @@ export interface ProfileAndStoreScreensProps {
     selectedCourseIds: string[];
     paymentMethodId: string;
     transactionReference: string;
-    fullName?: string;
-    phoneNumber?: string;
-    password?: string;
+    fullName?: string | undefined;
+    phoneNumber?: string | undefined;
+    password?: string | undefined;
+    receiptBase64?: string | undefined;
+    receiptUri?: string | undefined;
+    receiptFileName?: string | undefined;
+    receiptMimeType?: string | undefined;
   }) => void;
   themeMode?: ThemeMode;
   onToggleTheme?: () => void;
@@ -128,6 +142,7 @@ export function ProfileAndStoreScreens({
 
   const [copiedMethodId, setCopiedMethodId] = useState<string | null>(null);
   const [receiptAttached, setReceiptAttached] = useState<boolean>(false);
+  const [receiptImage, setReceiptImage] = useState<PickedReceiptImage | null>(null);
   const [checkoutAttempted, setCheckoutAttempted] = useState<boolean>(false);
   const [accountSetupAttempted, setAccountSetupAttempted] = useState<boolean>(false);
   const [bundleCheckedIds, setBundleCheckedIds] = useState<Set<string>>(
@@ -136,6 +151,112 @@ export function ProfileAndStoreScreens({
   const [selectedProviderId, setSelectedProviderId] = useState<string>(
     paymentMethods[0]?.id ?? 'pm-cbe-mobile'
   );
+
+  const handlePickReceipt = async (source: 'gallery' | 'camera') => {
+    try {
+      let result: ImagePicker.ImagePickerResult;
+      if (source === 'camera') {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert(
+            'Camera Permission Required',
+            'Mastera needs camera permission to capture your payment receipt screenshot.'
+          );
+          return;
+        }
+        result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ['images'],
+          allowsEditing: false,
+          quality: 0.85,
+          base64: true,
+        });
+      } else {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert(
+            'Photos Permission Required',
+            'Mastera needs access to your photos to attach your payment receipt screenshot.'
+          );
+          return;
+        }
+        result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images'],
+          allowsEditing: false,
+          quality: 0.85,
+          base64: true,
+        });
+      }
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        if (!asset) return;
+        let base64 = asset.base64 || '';
+        if (!base64 && asset.uri) {
+          try {
+            const res = await fetch(asset.uri);
+            const blob = await res.blob();
+            base64 = await new Promise<string>((resolve) => {
+              const reader = new FileReader();
+              reader.onloadend = () => {
+                const resStr = (reader.result as string) || '';
+                resolve(resStr.includes(',') ? resStr.split(',')[1] || '' : resStr);
+              };
+              reader.readAsDataURL(blob);
+            });
+          } catch {
+            // fallback
+          }
+        }
+        const rawName = asset.fileName || asset.uri.split('/').pop() || 'payment_receipt.jpg';
+        const cleanName = rawName.split('?')[0];
+        const picked: PickedReceiptImage = {
+          uri: asset.uri,
+          base64: base64 || undefined,
+          fileName: cleanName,
+          fileSize: asset.fileSize || 1024 * 180,
+          mimeType: asset.mimeType || 'image/jpeg',
+        };
+        setReceiptImage(picked);
+        setReceiptAttached(true);
+      }
+    } catch (err: any) {
+      console.error('Failed to pick receipt screenshot:', err);
+      Alert.alert('Error picking image', err?.message || 'Could not access image on device.');
+    }
+  };
+
+  const handleAttachReceiptPress = () => {
+    Alert.alert(
+      'Attach Payment Screenshot',
+      'Choose how you want to upload your bank or mobile payment receipt screenshot:',
+      [
+        {
+          text: 'Choose from Gallery',
+          onPress: () => handlePickReceipt('gallery'),
+        },
+        {
+          text: 'Take Photo with Camera',
+          onPress: () => handlePickReceipt('camera'),
+        },
+        ...(receiptImage
+          ? [
+              {
+                text: 'Remove Screenshot',
+                style: 'destructive' as const,
+                onPress: () => {
+                  setReceiptImage(null);
+                  setReceiptAttached(false);
+                },
+              },
+            ]
+          : []),
+        {
+          text: 'Cancel',
+          style: 'cancel' as const,
+        },
+      ]
+    );
+  };
 
   // Keep selected provider aligned with available payment methods
   useEffect(() => {
@@ -1894,7 +2015,7 @@ export function ProfileAndStoreScreens({
         </View>
 
         <TouchableOpacity
-          onPress={() => setReceiptAttached((prev) => !prev)}
+          onPress={handleAttachReceiptPress}
           style={[
             styles.receiptBox,
             {
@@ -1906,22 +2027,29 @@ export function ProfileAndStoreScreens({
                   ? tokens.success
                   : tokens.border,
               borderWidth: checkoutAttempted && !receiptAttached ? 1.5 : 1,
-              padding: 14,
+              padding: 12,
             },
           ]}
           activeOpacity={0.8}
         >
-          <MasteraIcon
-            name={receiptAttached ? 'check-circle' : checkoutAttempted ? 'x-circle' : 'award'}
-            size={22}
-            color={
-              receiptAttached
-                ? tokens.success
-                : checkoutAttempted
-                ? tokens.danger
-                : tokens.textMuted
-            }
-          />
+          {receiptImage ? (
+            <Image
+              source={{ uri: receiptImage.uri }}
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: 8,
+                backgroundColor: tokens.border,
+              }}
+              resizeMode="cover"
+            />
+          ) : (
+            <MasteraIcon
+              name={checkoutAttempted ? 'x-circle' : 'award'}
+              size={22}
+              color={checkoutAttempted ? tokens.danger : tokens.textMuted}
+            />
+          )}
           <View style={{ marginLeft: 10, flex: 1 }}>
             <Text
               style={{
@@ -1933,15 +2061,16 @@ export function ProfileAndStoreScreens({
                   ? tokens.danger
                   : tokens.textPrimary,
               }}
+              numberOfLines={1}
             >
-              {receiptAttached
-                ? 'payment_receipt_screenshot.png'
-                : 'Tap to attach payment screenshot'}
+              {receiptImage
+                ? receiptImage.fileName || 'receipt_screenshot.jpg'
+                : 'Tap to pick image from your phone'}
             </Text>
             <Text style={{ fontSize: 11, color: tokens.textMuted, marginTop: 2 }}>
-              {receiptAttached
-                ? '214 KB · Valid screenshot attached'
-                : 'Supports JPEG, PNG or WebP · Proof of payment'}
+              {receiptImage
+                ? `${Math.round((receiptImage.fileSize || 1024) / 1024)} KB · Screenshot ready to send`
+                : 'Supports Photo Gallery & Camera (JPEG, PNG, WebP)'}
             </Text>
           </View>
           <View
@@ -1959,7 +2088,7 @@ export function ProfileAndStoreScreens({
                 color: receiptAttached ? tokens.success : tokens.primary,
               }}
             >
-              {receiptAttached ? 'Attached ✓' : '+ Attach'}
+              {receiptAttached ? 'Change' : '+ Pick Photo'}
             </Text>
           </View>
         </TouchableOpacity>
@@ -2295,6 +2424,10 @@ export function ProfileAndStoreScreens({
               fullName: setupFullName.trim(),
               phoneNumber: setupPhone.trim(),
               password: setupPassword.trim(),
+              receiptBase64: receiptImage?.base64 || '',
+              receiptUri: receiptImage?.uri,
+              receiptFileName: receiptImage?.fileName,
+              receiptMimeType: receiptImage?.mimeType,
             });
             setScreen('ORDER_STATUS_PENDING');
           }}
