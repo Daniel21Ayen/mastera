@@ -10,16 +10,21 @@ const FORBIDDEN_CODE_PATTERNS = [
   /\b__mocks__\b/,
   /\bpurgeMockStudents\b/i,
   /\bq-fallback\b/,
+  /\b(fallbackChapter|fallbackQuestions|fallbackCourses)\b/,
 ];
 
 const MOBILE_FORBIDDEN_PATTERNS = [
   { pattern: /['"]Abebe(?:\s+Kebede)?['"]/, reason: "Hardcoded student name 'Abebe'" },
+  { pattern: /\bAbebe\b/, reason: "Hardcoded student name identifier 'Abebe'" },
   { pattern: /['"]MS0001['"]/, reason: "Hardcoded student code 'MS0001'" },
-  { pattern: /200\s*ETB/, reason: "Hardcoded price '200 ETB'" },
-  { pattern: /350\s*ETB/, reason: "Hardcoded price '350 ETB'" },
-  { pattern: /38\s*days\s*left/, reason: "Hardcoded duration '38 days left'" },
-  { pattern: /bundleDaysRemaining\s*=\s*38/, reason: "Hardcoded default bundleDaysRemaining = 38" },
-  { pattern: /pendingOrdersCount\s*=\s*1/, reason: "Hardcoded default pendingOrdersCount = 1" },
+  { pattern: /['"][^'"]*\b\d+\s*ETB[^'"]*['"]/, reason: "Hardcoded ETB string literal" },
+  { pattern: /\b\d+\s*ETB\b/, reason: "Hardcoded ETB price literal" },
+  { pattern: /\b38\s*days\s*left\b/i, reason: "Hardcoded duration '38 days left'" },
+  { pattern: /\b\w*(?:price|days|percent)\w*\s*=\s*\{\s*\d+\s*\}/i, reason: "Numeric literal assigned to price/days/percent JSX prop" },
+  { pattern: /\b(?:bundleDaysRemaining|pendingOrdersCount|overallMasteryPercent|streakDays|renewalWindowDays|priceETB)\s*=\s*\{\s*\d+\s*\}/, reason: "Numeric literal assigned to status/price/days/percent prop" },
+  { pattern: /['"]National COC Exam['"]/, reason: "Hardcoded National COC Exam fallback" },
+  { pattern: /['"]fallback['"]/i, reason: "String literal 'fallback'" },
+  { pattern: /\bfallback\s*[:=]\s*['"{]/i, reason: "Mock data fallback assignment" },
 ];
 
 interface MockViolation {

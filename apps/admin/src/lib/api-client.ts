@@ -57,5 +57,18 @@ export async function adminApiFetch<TResponse>(
     throw new Error(`${errCode}: ${errMessage}`);
   }
 
-  return (await response.json()) as TResponse;
+  if (response.status === 204) {
+    return {} as TResponse;
+  }
+
+  const rawText = await response.text();
+  if (!rawText || rawText.trim().length === 0) {
+    return {} as TResponse;
+  }
+
+  try {
+    return JSON.parse(rawText) as TResponse;
+  } catch {
+    return rawText as unknown as TResponse;
+  }
 }

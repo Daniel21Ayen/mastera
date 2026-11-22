@@ -6,6 +6,7 @@ import {
   SPACING,
   ThemeMode,
 } from '@mastera/ui-tokens';
+import { PaginatedTable, TableColumn } from '../shared/PaginatedTable';
 
 export interface AdminsRolesManagerProps {
   currentAdminId: string;
@@ -28,6 +29,8 @@ export function AdminsRolesManager({
 }: AdminsRolesManagerProps): React.ReactElement {
   const [roleFilter, setRoleFilter] = useState<'ALL' | AdminRole>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10;
 
   const tokens = ADMIN_THEMES[themeMode];
 
@@ -210,36 +213,74 @@ export function AdminsRolesManager({
       </div>
 
       {/* Administrators Table */}
-      <div
-        style={{
-          backgroundColor: tokens.surface,
-          border: `1px solid ${tokens.border}`,
-          borderRadius: RADIUS.lg,
-          overflow: 'hidden',
-        }}
-      >
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr
-              style={{
-                borderBottom: `1px solid ${tokens.border}`,
-                textAlign: 'left',
-                fontSize: 12,
-                color: tokens.textMuted,
-              }}
-            >
-              <th style={{ padding: SPACING.md }}>ADMINISTRATOR</th>
-              <th style={{ padding: SPACING.md }}>ROLE</th>
-              <th style={{ padding: SPACING.md }}>STATUS</th>
-              <th style={{ padding: SPACING.md }}>2FA (TOTP)</th>
-              <th style={{ padding: SPACING.md }}>LAST LOGIN</th>
-              <th style={{ padding: SPACING.md, textAlign: 'right' }}>
-                ACTIONS
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredAdmins.map((admin) => {
+      <PaginatedTable
+        columns={[
+          {
+            key: 'name',
+            header: 'ADMINISTRATOR',
+            render: (admin: AdminUserDto) => (
+              <div>
+                <div style={{ fontWeight: 700 }}>{admin.name}</div>
+                <div style={{ fontSize: 12, color: tokens.textMuted }}>
+                  {admin.email}
+                </div>
+              </div>
+            ),
+          },
+          {
+            key: 'role',
+            header: 'ROLE',
+            render: (admin: AdminUserDto) => (
+              <span
+                style={{
+                  padding: `4px ${SPACING.sm}px`,
+                  borderRadius: RADIUS.pill,
+                  backgroundColor: tokens.surfaceSubtle,
+                  color: tokens.primary,
+                  fontSize: 12,
+                  fontWeight: 600,
+                }}
+              >
+                {admin.adminRole.replace('_', ' ')}
+              </span>
+            ),
+          },
+          {
+            key: 'status',
+            header: 'STATUS',
+            render: (admin: AdminUserDto) => (
+              <span
+                style={{
+                  color: admin.isActive ? tokens.success : tokens.textMuted,
+                  fontWeight: 600,
+                  fontSize: 13,
+                }}
+              >
+                ● {admin.isActive ? 'Active' : 'Inactive'}
+              </span>
+            ),
+          },
+          {
+            key: 'totp',
+            header: '2FA (TOTP)',
+            render: (admin: AdminUserDto) => (
+              <span style={{ fontSize: 12, fontWeight: 600 }}>
+                {admin.totpEnabled ? 'Enabled' : 'Disabled'}
+              </span>
+            ),
+          },
+          {
+            key: 'lastLogin',
+            header: 'LAST LOGIN',
+            render: (admin: AdminUserDto) => (
+              <span style={{ fontSize: 13 }}>{admin.lastLoginAt ?? 'Never'}</span>
+            ),
+          },
+          {
+            key: 'actions',
+            header: 'ACTIONS',
+            align: 'right',
+            render: (admin: AdminUserDto) => {
               const isSelf = admin.id === currentAdminId;
               const isLastSuperAdmin =
                 admin.adminRole === 'SUPER_ADMIN' &&
@@ -248,114 +289,74 @@ export function AdminsRolesManager({
               const disableDelete = isSelf || isLastSuperAdmin;
 
               return (
-                <tr
-                  key={admin.id}
-                  style={{ borderBottom: `1px solid ${tokens.border}` }}
-                >
-                  <td style={{ padding: SPACING.md }}>
-                    <div style={{ fontWeight: 700 }}>{admin.name}</div>
-                    <div style={{ fontSize: 12, color: tokens.textMuted }}>
-                      {admin.email}
-                    </div>
-                  </td>
-                  <td style={{ padding: SPACING.md }}>
-                    <span
-                      style={{
-                        padding: `4px ${SPACING.sm}px`,
-                        borderRadius: RADIUS.pill,
-                        backgroundColor: tokens.surfaceSubtle,
-                        color: tokens.primary,
-                        fontSize: 12,
-                        fontWeight: 600,
-                      }}
-                    >
-                      {admin.adminRole.replace('_', ' ')}
-                    </span>
-                  </td>
-                  <td style={{ padding: SPACING.md }}>
-                    <span
-                      style={{
-                        color: admin.isActive
-                          ? tokens.success
-                          : tokens.textMuted,
-                        fontWeight: 600,
-                        fontSize: 13,
-                      }}
-                    >
-                      ● {admin.isActive ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
-                  <td style={{ padding: SPACING.md }}>
-                    <span style={{ fontSize: 12, fontWeight: 600 }}>
-                      {admin.totpEnabled ? 'Enabled' : 'Disabled'}
-                    </span>
-                  </td>
-                  <td style={{ padding: SPACING.md, fontSize: 13 }}>
-                    {admin.lastLoginAt ?? 'Never'}
-                  </td>
-                  <td style={{ padding: SPACING.md, textAlign: 'right' }}>
-                    <div
-                      style={{
-                        display: 'inline-flex',
-                        gap: SPACING.xs,
-                      }}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => onConfigure2fa(admin.id)}
-                        style={{
-                          padding: `4px ${SPACING.sm}px`,
-                          borderRadius: RADIUS.sm,
-                          border: `1px solid ${tokens.border}`,
-                          backgroundColor: tokens.surface,
-                          cursor: 'pointer',
-                        }}
-                      >
-                        2FA
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onEditAdmin(admin.id)}
-                        style={{
-                          padding: `4px ${SPACING.sm}px`,
-                          borderRadius: RADIUS.sm,
-                          border: `1px solid ${tokens.border}`,
-                          backgroundColor: tokens.surface,
-                          cursor: 'pointer',
-                        }}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        disabled={disableDelete}
-                        onClick={() => onDeleteAdmin(admin.id)}
-                        title={
-                          disableDelete
-                            ? 'FR-G63: Cannot delete own account or the last active Super Admin'
-                            : 'Delete administrator'
-                        }
-                        style={{
-                          padding: `4px ${SPACING.sm}px`,
-                          borderRadius: RADIUS.sm,
-                          border: 'none',
-                          backgroundColor: tokens.dangerBg,
-                          color: tokens.danger,
-                          fontWeight: 600,
-                          opacity: disableDelete ? 0.4 : 1,
-                          cursor: disableDelete ? 'not-allowed' : 'pointer',
-                        }}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </td>
-                </tr>
+                <div style={{ display: 'inline-flex', gap: SPACING.xs }}>
+                  <button
+                    type="button"
+                    onClick={() => onConfigure2fa(admin.id)}
+                    style={{
+                      padding: `4px ${SPACING.sm}px`,
+                      borderRadius: RADIUS.sm,
+                      border: `1px solid ${tokens.border}`,
+                      backgroundColor: tokens.surface,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    2FA
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onEditAdmin(admin.id)}
+                    style={{
+                      padding: `4px ${SPACING.sm}px`,
+                      borderRadius: RADIUS.sm,
+                      border: `1px solid ${tokens.border}`,
+                      backgroundColor: tokens.surface,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    disabled={disableDelete}
+                    onClick={() => onDeleteAdmin(admin.id)}
+                    title={
+                      disableDelete
+                        ? 'FR-G63: Cannot delete own account or the last active Super Admin'
+                        : 'Delete administrator'
+                    }
+                    style={{
+                      padding: `4px ${SPACING.sm}px`,
+                      borderRadius: RADIUS.sm,
+                      border: 'none',
+                      backgroundColor: tokens.dangerBg,
+                      color: tokens.danger,
+                      fontWeight: 600,
+                      opacity: disableDelete ? 0.4 : 1,
+                      cursor: disableDelete ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    Delete
+                  </button>
+                </div>
               );
-            })}
-          </tbody>
-        </table>
-      </div>
+            },
+          },
+        ]}
+        data={{
+          items: filteredAdmins.slice(
+            (currentPage - 1) * pageSize,
+            currentPage * pageSize
+          ),
+          total: filteredAdmins.length,
+          page: currentPage,
+          pageSize,
+          totalPages: Math.ceil(filteredAdmins.length / pageSize) || 1,
+        }}
+        rowKey={(a) => a.id}
+        onPageChange={setCurrentPage}
+        themeMode={themeMode}
+      />
     </div>
   );
 }

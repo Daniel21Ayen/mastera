@@ -18,6 +18,8 @@ import {
   Bell,
   Search,
   BookOpen,
+  Landmark,
+  Building2,
 } from 'lucide-react';
 import { AdminRole } from '@mastera/contracts';
 import {
@@ -51,6 +53,9 @@ export function AdminShell({
   const tokens = ADMIN_THEMES[themeMode];
 
   // Collapsible sub-menus state matching the 50 design screenshots
+  const [catalogOpen, setCatalogOpen] = useState(
+    currentPath.startsWith('/catalog')
+  );
   const [contentOpen, setContentOpen] = useState(
     currentPath.startsWith('/content')
   );
@@ -177,25 +182,95 @@ export function AdminShell({
             <span>Students</span>
           </Link>
 
-          {/* Courses */}
-          <Link
-            href="/catalog/courses"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: SPACING.md,
-              padding: `${SPACING.sm}px ${SPACING.md}px`,
-              borderRadius: RADIUS.md,
-              backgroundColor: currentPath.startsWith('/catalog') ? tokens.primary : 'transparent',
-              color: tokens.sidebarText,
-              textDecoration: 'none',
-              fontSize: 13,
-              fontWeight: currentPath.startsWith('/catalog') ? 600 : 500,
-            }}
-          >
-            <GraduationCap size={18} strokeWidth={2} />
-            <span>Courses</span>
-          </Link>
+          {/* Academic Catalog (Collapsible Group) */}
+          <div>
+            <button
+              type="button"
+              onClick={() => setCatalogOpen((prev) => !prev)}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: `${SPACING.sm}px ${SPACING.md}px`,
+                borderRadius: RADIUS.md,
+                backgroundColor: currentPath.startsWith('/catalog') && !catalogOpen ? tokens.primary : 'transparent',
+                color: tokens.sidebarText,
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: 13,
+                fontWeight: currentPath.startsWith('/catalog') ? 600 : 500,
+                textAlign: 'left',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: SPACING.md }}>
+                <GraduationCap size={18} strokeWidth={2} />
+                <span>Catalog</span>
+              </div>
+              {catalogOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </button>
+
+            {catalogOpen && (
+              <div style={{ paddingLeft: SPACING.md, marginTop: 4, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <Link
+                  href="/catalog/universities"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: SPACING.sm,
+                    padding: `6px ${SPACING.sm}px`,
+                    borderRadius: RADIUS.sm,
+                    backgroundColor: currentPath === '/catalog/universities' ? tokens.primary : 'transparent',
+                    color: tokens.sidebarText,
+                    textDecoration: 'none',
+                    fontSize: 12,
+                    fontWeight: currentPath === '/catalog/universities' ? 600 : 400,
+                  }}
+                >
+                  <Landmark size={14} strokeWidth={2} />
+                  <span>Universities</span>
+                </Link>
+
+                <Link
+                  href="/catalog/programs"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: SPACING.sm,
+                    padding: `6px ${SPACING.sm}px`,
+                    borderRadius: RADIUS.sm,
+                    backgroundColor: currentPath === '/catalog/programs' ? tokens.primary : 'transparent',
+                    color: tokens.sidebarText,
+                    textDecoration: 'none',
+                    fontSize: 12,
+                    fontWeight: currentPath === '/catalog/programs' ? 600 : 400,
+                  }}
+                >
+                  <Building2 size={14} strokeWidth={2} />
+                  <span>Departments</span>
+                </Link>
+
+                <Link
+                  href="/catalog/courses"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: SPACING.sm,
+                    padding: `6px ${SPACING.sm}px`,
+                    borderRadius: RADIUS.sm,
+                    backgroundColor: currentPath === '/catalog/courses' ? tokens.primary : 'transparent',
+                    color: tokens.sidebarText,
+                    textDecoration: 'none',
+                    fontSize: 12,
+                    fontWeight: currentPath === '/catalog/courses' ? 600 : 400,
+                  }}
+                >
+                  <BookOpen size={14} strokeWidth={2} />
+                  <span>Courses</span>
+                </Link>
+              </div>
+            )}
+          </div>
 
           {/* Content (Collapsible Group) */}
           <div>

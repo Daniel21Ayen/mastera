@@ -10,8 +10,11 @@ import { adminApiFetch } from '@/lib/api-client';
 export default function ProgramsCatalogPage(): React.ReactElement {
   const tokens = ADMIN_THEMES.light;
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedUnivFilter, setSelectedUnivFilter] = useState('ALL');
   const [currentPage, setCurrentPage] = useState(1);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
   const [universities, setUniversities] = useState<CatalogUniversityDto[]>([]);
   const [programs, setPrograms] = useState<CatalogProgramDto[]>([]);
   const [newProg, setNewProg] = useState({
@@ -42,8 +45,10 @@ export default function ProgramsCatalogPage(): React.ReactElement {
 
   const handleAddProgram = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newProg.name || !newProg.universityId) return;
+    if (!newProg.name.trim() || !newProg.universityId) return;
     try {
+      setIsSubmitting(true);
+      setModalError(null);
       await adminApiFetch('/catalog/programs', {
         method: 'POST',
         body: {
@@ -55,35 +60,44 @@ export default function ProgramsCatalogPage(): React.ReactElement {
       await loadData();
       setNewProg((prev) => ({ ...prev, name: '' }));
       setIsAddModalOpen(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to add program:', err);
-      // Optimistic update fallback
-      const created: CatalogProgramDto = {
-        id: `prog-${Date.now()}`,
-        universityId: newProg.universityId,
-        name: newProg.name.trim(),
-        isActive: true,
-        version: 1,
-      };
-      setPrograms((prev) => [...prev, created]);
-      setNewProg((prev) => ({ ...prev, name: '' }));
-      setIsAddModalOpen(false);
+      setModalError(err?.message || 'Failed to add department. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleToggleActive = (id: string) => {
+  const handleToggleActive = async (id: string) => {
+    const target = programs.find((p) => p.id === id);
+    if (!target) return;
+    const newStatus = !target.isActive;
     setPrograms((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, isActive: !p.isActive } : p))
+      prev.map((p) => (p.id === id ? { ...p, isActive: newStatus } : p))
     );
+    try {
+      await adminApiFetch(`/catalog/programs/${id}`, {
+        method: 'PUT',
+        body: { isActive: newStatus },
+      });
+    } catch (err) {
+      console.error('Failed to toggle program status:', err);
+      setPrograms((prev) =>
+        prev.map((p) => (p.id === id ? { ...p, isActive: target.isActive } : p))
+      );
+    }
   };
 
   const universityMap = new Map(universities.map((u) => [u.id, u.shortName || u.name]));
 
-  const filtered = programs.filter(
-    (p) =>
+  const filtered = programs.filter((p) => {
+    const matchesUniv =
+      selectedUnivFilter === 'ALL' || p.universityId === selectedUnivFilter;
+    const matchesSearch =
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (universityMap.get(p.universityId) || '').toLowerCase().includes(searchQuery.toLowerCase())
-  );
+      (universityMap.get(p.universityId) || '').toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesUniv && matchesSearch;
+  });
 
   const columns = [
     {
@@ -210,6 +224,7 @@ export default function ProgramsCatalogPage(): React.ReactElement {
           borderRadius: RADIUS.lg,
           border: `1px solid ${tokens.border}`,
           alignItems: 'center',
+          flexWrap: 'wrap',
         }}
       >
         <div
@@ -218,6 +233,7 @@ export default function ProgramsCatalogPage(): React.ReactElement {
             alignItems: 'center',
             gap: SPACING.xs,
             flex: 1,
+            minWidth: 260,
             backgroundColor: tokens.surfaceSubtle,
             padding: `${SPACING.xs}px ${SPACING.sm}px`,
             borderRadius: RADIUS.md,
@@ -226,9 +242,12 @@ export default function ProgramsCatalogPage(): React.ReactElement {
           <Search size={16} strokeWidth={2} color={tokens.textMuted} />
           <input
             type="text"
-            placeholder="Search programs by name or university..."
+            placeholder="Search departments by name or university..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setCurrentPage(1);
+            }}
             style={{
               border: 'none',
               background: 'transparent',
@@ -238,6 +257,34 @@ export default function ProgramsCatalogPage(): React.ReactElement {
               color: tokens.textPrimary,
             }}
           />
+        </div>
+
+        <div style={{ width: 240 }}>
+          <select
+            value={selectedUnivFilter}
+            onChange={(e) => {
+              setSelectedUnivFilter(e.target.value);
+              setCurrentPage(1);
+            }}
+            style={{
+              width: '100%',
+              padding: `${SPACING.xs}px ${SPACING.sm}px`,
+              borderRadius: RADIUS.md,
+              border: `1px solid ${tokens.border}`,
+              backgroundColor: tokens.surfaceSubtle,
+              fontSize: 13,
+              color: tokens.textPrimary,
+              cursor: 'pointer',
+              height: 36,
+            }}
+          >
+            <option value="ALL">All Universities ({universities.length})</option>
+            {universities.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.shortName} - {u.name}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -278,88 +325,139 @@ export default function ProgramsCatalogPage(): React.ReactElement {
             }}
           >
             <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 16px 0', color: tokens.textPrimary }}>
-              Add Academic Program
+              Add Academic Program / Department
             </h2>
-            <form onSubmit={handleAddProgram} style={{ display: 'flex', flexDirection: 'column', gap: SPACING.md }}>
-              <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 4, color: tokens.textPrimary }}>
-                  University
-                </label>
-                <select
-                  required
-                  value={newProg.universityId}
-                  onChange={(e) => setNewProg({ ...newProg, universityId: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: `${SPACING.sm}px`,
-                    borderRadius: RADIUS.sm,
-                    border: `1px solid ${tokens.border}`,
-                    fontSize: 13,
-                    boxSizing: 'border-box',
-                    backgroundColor: tokens.surface,
-                  }}
-                >
-                  {universities.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.name} ({u.shortName})
-                    </option>
-                  ))}
-                </select>
-              </div>
 
-              <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 4, color: tokens.textPrimary }}>
-                  Program / Department Name
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Electrical and Computer Engineering"
-                  value={newProg.name}
-                  onChange={(e) => setNewProg({ ...newProg, name: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: `${SPACING.sm}px`,
-                    borderRadius: RADIUS.sm,
-                    border: `1px solid ${tokens.border}`,
-                    fontSize: 13,
-                    boxSizing: 'border-box',
-                  }}
-                />
+            {modalError && (
+              <div
+                style={{
+                  backgroundColor: tokens.dangerBg,
+                  color: tokens.danger,
+                  padding: `${SPACING.sm}px ${SPACING.md}px`,
+                  borderRadius: RADIUS.md,
+                  fontSize: 12,
+                  marginBottom: SPACING.md,
+                  fontWeight: 500,
+                }}
+              >
+                {modalError}
               </div>
+            )}
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: SPACING.sm, marginTop: SPACING.sm }}>
+            {universities.length === 0 ? (
+              <div
+                style={{
+                  backgroundColor: tokens.surfaceSubtle,
+                  padding: SPACING.lg,
+                  borderRadius: RADIUS.md,
+                  textAlign: 'center',
+                }}
+              >
+                <p style={{ margin: '0 0 12px 0', fontSize: 13, color: tokens.textMuted }}>
+                  No universities exist yet. Please register at least one university before adding departments.
+                </p>
                 <button
                   type="button"
                   onClick={() => setIsAddModalOpen(false)}
                   style={{
-                    padding: `${SPACING.sm}px ${SPACING.lg}px`,
-                    borderRadius: RADIUS.md,
-                    border: `1px solid ${tokens.border}`,
-                    backgroundColor: tokens.surface,
-                    fontSize: 13,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  style={{
-                    padding: `${SPACING.sm}px ${SPACING.lg}px`,
+                    padding: `${SPACING.sm}px ${SPACING.md}px`,
                     borderRadius: RADIUS.md,
                     border: 'none',
                     backgroundColor: tokens.primary,
                     color: tokens.surface,
-                    fontWeight: 600,
                     fontSize: 13,
                     cursor: 'pointer',
                   }}
                 >
-                  Save Program
+                  Close
                 </button>
               </div>
-            </form>
+            ) : (
+              <form onSubmit={handleAddProgram} style={{ display: 'flex', flexDirection: 'column', gap: SPACING.md }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 4, color: tokens.textPrimary }}>
+                    University
+                  </label>
+                  <select
+                    required
+                    value={newProg.universityId}
+                    onChange={(e) => setNewProg({ ...newProg, universityId: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: `${SPACING.sm}px`,
+                      borderRadius: RADIUS.sm,
+                      border: `1px solid ${tokens.border}`,
+                      fontSize: 13,
+                      boxSizing: 'border-box',
+                      backgroundColor: tokens.surface,
+                    }}
+                  >
+                    {universities.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name} ({u.shortName})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 4, color: tokens.textPrimary }}>
+                    Program / Department Name
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Electrical and Computer Engineering"
+                    value={newProg.name}
+                    onChange={(e) => setNewProg({ ...newProg, name: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: `${SPACING.sm}px`,
+                      borderRadius: RADIUS.sm,
+                      border: `1px solid ${tokens.border}`,
+                      fontSize: 13,
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: SPACING.sm, marginTop: SPACING.sm }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddModalOpen(false);
+                      setModalError(null);
+                    }}
+                    style={{
+                      padding: `${SPACING.sm}px ${SPACING.lg}px`,
+                      borderRadius: RADIUS.md,
+                      border: `1px solid ${tokens.border}`,
+                      backgroundColor: tokens.surface,
+                      fontSize: 13,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    style={{
+                      padding: `${SPACING.sm}px ${SPACING.lg}px`,
+                      borderRadius: RADIUS.md,
+                      border: 'none',
+                      backgroundColor: isSubmitting ? tokens.textMuted : tokens.primary,
+                      color: tokens.surface,
+                      fontWeight: 600,
+                      fontSize: 13,
+                      cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {isSubmitting ? 'Saving...' : 'Save Program'}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

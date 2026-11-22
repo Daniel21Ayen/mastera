@@ -12,6 +12,8 @@ export default function UniversitiesCatalogPage(): React.ReactElement {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
   const [newUniv, setNewUniv] = useState({ name: '', shortName: '' });
   const [universities, setUniversities] = useState<CatalogUniversityDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -34,8 +36,10 @@ export default function UniversitiesCatalogPage(): React.ReactElement {
 
   const handleAddUniversity = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newUniv.name || !newUniv.shortName) return;
+    if (!newUniv.name.trim() || !newUniv.shortName.trim()) return;
     try {
+      setIsSubmitting(true);
+      setModalError(null);
       await adminApiFetch('/catalog/universities', {
         method: 'POST',
         body: {
@@ -47,26 +51,32 @@ export default function UniversitiesCatalogPage(): React.ReactElement {
       await loadUniversities();
       setNewUniv({ name: '', shortName: '' });
       setIsAddModalOpen(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to add university:', err);
-      // Optimistic update fallback
-      const created: CatalogUniversityDto = {
-        id: `univ-${Date.now()}`,
-        name: newUniv.name.trim(),
-        shortName: newUniv.shortName.trim().toUpperCase(),
-        isActive: true,
-        version: 1,
-      };
-      setUniversities((prev) => [...prev, created]);
-      setNewUniv({ name: '', shortName: '' });
-      setIsAddModalOpen(false);
+      setModalError(err?.message || 'Failed to add university. Please check if the short code is already in use.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleToggleActive = (id: string) => {
+  const handleToggleActive = async (id: string) => {
+    const target = universities.find((u) => u.id === id);
+    if (!target) return;
+    const newStatus = !target.isActive;
     setUniversities((prev) =>
-      prev.map((u) => (u.id === id ? { ...u, isActive: !u.isActive } : u))
+      prev.map((u) => (u.id === id ? { ...u, isActive: newStatus } : u))
     );
+    try {
+      await adminApiFetch(`/catalog/universities/${id}`, {
+        method: 'PUT',
+        body: { isActive: newStatus },
+      });
+    } catch (err) {
+      console.error('Failed to toggle university status:', err);
+      setUniversities((prev) =>
+        prev.map((u) => (u.id === id ? { ...u, isActive: target.isActive } : u))
+      );
+    }
   };
 
   const filtered = universities.filter(
@@ -218,7 +228,10 @@ export default function UniversitiesCatalogPage(): React.ReactElement {
             type="text"
             placeholder="Search universities by name or short code..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setCurrentPage(1);
+            }}
             style={{
               border: 'none',
               background: 'transparent',
@@ -270,6 +283,23 @@ export default function UniversitiesCatalogPage(): React.ReactElement {
             <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 16px 0', color: tokens.textPrimary }}>
               Add Ethiopian University
             </h2>
+
+            {modalError && (
+              <div
+                style={{
+                  backgroundColor: tokens.dangerBg,
+                  color: tokens.danger,
+                  padding: `${SPACING.sm}px ${SPACING.md}px`,
+                  borderRadius: RADIUS.md,
+                  fontSize: 12,
+                  marginBottom: SPACING.md,
+                  fontWeight: 500,
+                }}
+              >
+                {modalError}
+              </div>
+            )}
+
             <form onSubmit={handleAddUniversity} style={{ display: 'flex', flexDirection: 'column', gap: SPACING.md }}>
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 4, color: tokens.textPrimary }}>
@@ -316,7 +346,10 @@ export default function UniversitiesCatalogPage(): React.ReactElement {
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: SPACING.sm, marginTop: SPACING.sm }}>
                 <button
                   type="button"
-                  onClick={() => setIsAddModalOpen(false)}
+                  onClick={() => {
+                    setIsAddModalOpen(false);
+                    setModalError(null);
+                  }}
                   style={{
                     padding: `${SPACING.sm}px ${SPACING.lg}px`,
                     borderRadius: RADIUS.md,
@@ -330,18 +363,19 @@ export default function UniversitiesCatalogPage(): React.ReactElement {
                 </button>
                 <button
                   type="submit"
+                  disabled={isSubmitting}
                   style={{
                     padding: `${SPACING.sm}px ${SPACING.lg}px`,
                     borderRadius: RADIUS.md,
                     border: 'none',
-                    backgroundColor: tokens.primary,
+                    backgroundColor: isSubmitting ? tokens.textMuted : tokens.primary,
                     color: tokens.surface,
                     fontWeight: 600,
                     fontSize: 13,
-                    cursor: 'pointer',
+                    cursor: isSubmitting ? 'not-allowed' : 'pointer',
                   }}
                 >
-                  Save University
+                  {isSubmitting ? 'Saving...' : 'Save University'}
                 </button>
               </div>
             </form>

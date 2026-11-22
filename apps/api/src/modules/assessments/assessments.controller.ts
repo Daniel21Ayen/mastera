@@ -156,6 +156,7 @@ export class AssessmentsController {
     @Body() body?: { actor?: AuthenticatedAdminContext }
   ) {
     const actor = body?.actor || DEFAULT_SUPER_ADMIN;
-    return this.assessmentsService.deleteQuestion(actor, questionId);
+    await this.assessmentsService.deleteQuestion(actor, questionId);
+    return { success: true, deletedQuestionId: questionId };
   }
 }
