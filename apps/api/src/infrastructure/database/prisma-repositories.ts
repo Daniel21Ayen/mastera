@@ -593,6 +593,12 @@ export class PrismaStudentAuthRepository implements StudentAuthRepositoryPort {
     if (query.identifier) {
       orConditions.push({ identifier: query.identifier });
       orConditions.push({ studentCode: query.identifier });
+      const cleaned = query.identifier.replace(/\s+/g, '');
+      if (cleaned.startsWith('+251')) {
+        orConditions.push({ identifier: '0' + cleaned.slice(4) });
+      } else if (cleaned.startsWith('09') || cleaned.startsWith('07')) {
+        orConditions.push({ identifier: '+251' + cleaned.slice(1) });
+      }
     }
     if (query.localAccountId) orConditions.push({ localAccountId: query.localAccountId });
 
@@ -632,6 +638,7 @@ export class PrismaStudentAuthRepository implements StudentAuthRepositoryPort {
             expiresAt: latestExpiry > 0 ? new Date(latestExpiry).toISOString() : null,
             coursesCount: student.entitlements.length,
           },
+          activeCourseIds: student.entitlements.map((e) => e.courseId),
           perCourseProgress: {},
           continueLearningTarget: firstCourse
             ? {
@@ -659,6 +666,7 @@ export class PrismaStudentAuthRepository implements StudentAuthRepositoryPort {
           bundleDaysRemaining: 0,
           pendingOrdersCount: 1,
           entitlement: { daysLeft: 0, expiresAt: null, coursesCount: 0 },
+          activeCourseIds: [],
           perCourseProgress: {},
           continueLearningTarget: null,
         };

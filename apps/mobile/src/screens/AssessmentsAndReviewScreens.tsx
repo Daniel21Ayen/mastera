@@ -367,7 +367,7 @@ export function CourseTestsQuizFlowScreen({
       .map((ch, idx) => ({
         item: ch,
         canOpenNow: true,
-        accessBadge: ch.isFree ? 'Free' : idx === 3 ? 'Locked' : 'Included',
+        accessBadge: ch.isFree ? 'Free' : 'Included',
         updateAvailable: false,
       }));
   }

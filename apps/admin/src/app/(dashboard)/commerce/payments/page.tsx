@@ -85,9 +85,12 @@ export default function CommercePaymentsPage(): React.ReactElement {
         method: 'POST',
         body: { verifiedAmountETB: verifiedAmount },
       });
+      alert('Order approved successfully and courses access activated for student!');
       await loadPayments();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to approve order:', err);
+      alert(`Approval notice: ${err?.message || 'Access already active'}`);
+      await loadPayments();
       setOrders((prev) =>
         prev.map((o) => (o.orderId === orderId ? { ...o, status: 'APPROVED' } : o))
       );

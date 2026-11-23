@@ -86,6 +86,7 @@ export interface ProfileAndStoreScreensProps {
   freshmanPackagePriceETB?: number;
   bundleDurationDays?: number;
   onOpenDownloadsManager: () => void;
+  onCheckApprovalStatus?: () => Promise<void> | void;
   onChangeUiLanguage: (lang: 'en' | 'am') => void;
   onReleaseDeviceAndLogout: () => void;
   onSubmitBundleOrder: (payload: {
@@ -126,6 +127,7 @@ export function ProfileAndStoreScreens({
   freshmanPackagePriceETB = 350,
   bundleDurationDays = 150,
   onOpenDownloadsManager,
+  onCheckApprovalStatus,
   onChangeUiLanguage,
   onReleaseDeviceAndLogout,
   onSubmitBundleOrder,
@@ -140,6 +142,15 @@ export function ProfileAndStoreScreens({
       setScreen(initialScreen);
     }
   }, [initialScreen]);
+
+  React.useEffect(() => {
+    if (
+      screen === 'ORDER_STATUS_PENDING' &&
+      (hasActiveBundle || (studentCode && studentCode !== 'LOCAL_ONLY'))
+    ) {
+      setScreen('ORDER_APPROVED_MS_ID');
+    }
+  }, [screen, hasActiveBundle, studentCode]);
 
   const [copiedMethodId, setCopiedMethodId] = useState<string | null>(null);
   const [receiptAttached, setReceiptAttached] = useState<boolean>(false);
@@ -2558,11 +2569,15 @@ export function ProfileAndStoreScreens({
         </View>
 
         <TouchableOpacity
-          onPress={() => setScreen('ORDER_APPROVED_MS_ID')}
+          onPress={async () => {
+            if (onCheckApprovalStatus) {
+              await onCheckApprovalStatus();
+            }
+          }}
           style={[styles.outlineBtn, { borderColor: tokens.primary, marginTop: SPACING.md }]}
         >
           <Text style={[styles.outlineBtnText, { color: tokens.primary }]}>
-            Simulate Admin Approval (Demo)
+            Check Approval Status
           </Text>
         </TouchableOpacity>
 
