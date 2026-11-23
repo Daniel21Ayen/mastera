@@ -163,7 +163,7 @@ export default function App(): any {
   }, []);
 
   // Reusable loader for live student summary from database (Phase 2)
-  const loadStudentSummary = React.useCallback(async () => {
+  const syncStudentSummary = React.useCallback(async () => {
     try {
       const candidateHosts = getCandidateHosts();
       for (const host of candidateHosts) {
@@ -208,6 +208,8 @@ export default function App(): any {
       }
     } catch {}
   }, [studentCode, studentPhone]);
+
+  const loadStudentSummary = syncStudentSummary;
 
   useEffect(() => {
     syncStudentSummary();
