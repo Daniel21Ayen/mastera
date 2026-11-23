@@ -40,6 +40,7 @@ export interface CourseMaterialAndReaderScreensProps {
     }
   >;
   isCourseDownloaded?: boolean;
+  hasActiveAccess?: boolean;
   downloadedChapterIds?: string[];
   onDownloadCourse: () => void;
   onDeleteCourseDownload?: () => void;
@@ -64,6 +65,7 @@ export function CourseMaterialAndReaderScreens({
   chaptersByBookId,
   chapterBodyByChapterId,
   isCourseDownloaded = false,
+  hasActiveAccess = false,
   downloadedChapterIds = ['ch-1', 'ch-2'],
   onDownloadCourse,
   onDeleteCourseDownload,
@@ -262,15 +264,15 @@ export function CourseMaterialAndReaderScreens({
             )
             .map((ch, idx) => ({
               item: ch,
-              canOpenNow: true,
-              accessBadge: ch.isFree ? 'Free' : idx === 3 ? 'Locked' : 'Included',
+              canOpenNow: hasActiveAccess || ch.isFree,
+              accessBadge: ch.isFree ? 'Free' : hasActiveAccess ? 'Included' : 'Locked',
               isCompleted: idx === 0,
             }))
         : [];
     const chapters = rawChapters.map((r, idx) => ({
       item: r.item || r,
-      canOpenNow: r.canOpenNow !== false,
-      accessBadge: r.accessBadge || (idx === 3 ? 'Locked' : 'Included'),
+      canOpenNow: hasActiveAccess || (r.item && r.item.isFree) || r.canOpenNow !== false,
+      accessBadge: r.accessBadge || (hasActiveAccess || (r.item && r.item.isFree) ? 'Included' : 'Locked'),
       isCompleted: idx === 0,
     }));
 
@@ -316,7 +318,7 @@ export function CourseMaterialAndReaderScreens({
               </View>
             ) : (
               chapters.map((ch, idx) => {
-              const isLocked = ch.accessBadge === 'Locked' || idx === 3;
+              const isLocked = ch.accessBadge === 'Locked' || (!hasActiveAccess && !ch.item.isFree);
               const isCompleted = ch.isCompleted;
               const isChapterDownloaded =
                 downloadedChapters.has(ch.item.id) || localCourseDownloaded;

@@ -170,9 +170,10 @@ export default function App(): any {
         try {
           const controller = new AbortController();
           const timer = setTimeout(() => controller.abort(), 2000);
-          const url =
-            `${host}/student/me/summary` +
-            (studentCode ? `?studentCode=${studentCode}` : '');
+          const params = new URLSearchParams();
+          if (studentCode) params.set('studentCode', studentCode);
+          if (studentPhone) params.set('identifier', studentPhone);
+          const url = `${host}/student/me/summary?${params.toString()}`;
           const res = await fetch(url, { signal: controller.signal });
           clearTimeout(timer);
           if (res.ok) {
@@ -193,9 +194,12 @@ export default function App(): any {
                 setStreakDays((summary as any).streakDays);
               if ((summary as any).quizzesPassedCount !== undefined)
                 setQuizzesPassedCount((summary as any).quizzesPassedCount);
-              if (summary.accountState === 'CLAIMED_REGISTERED') {
+              if (summary.accountState === 'CLAIMED_REGISTERED' || (summary.bundleDaysRemaining && summary.bundleDaysRemaining > 0)) {
                 setAccountState('REGISTERED_REMOTE');
                 setHasActiveBundle(true);
+              }
+              if (Array.isArray(summary.activeCourseIds) && summary.activeCourseIds.length > 0) {
+                setSelectedCourseIds(summary.activeCourseIds);
               }
             }
             break;
@@ -203,7 +207,13 @@ export default function App(): any {
         } catch {}
       }
     } catch {}
-  }, [studentCode]);
+  }, [studentCode, studentPhone]);
+
+  useEffect(() => {
+    syncStudentSummary();
+    const interval = setInterval(syncStudentSummary, 4000);
+    return () => clearInterval(interval);
+  }, [syncStudentSummary]);
 
   // Continuous live database synchronization:
   // Dynamically syncs universities, programs, courses, chapters, exams, pricing, and payment methods from PostgreSQL
@@ -527,7 +537,7 @@ export default function App(): any {
                   sizeMB: 4,
                   isDownloaded:
                     isCourseDown || downloadedChapterIds.includes(ch.item.id),
-                  isLocked: isCourseLocked || idx === 3,
+                  isLocked: isCourseLocked,
                   parentCourseTitle: course.title,
                 }));
 
@@ -603,6 +613,7 @@ export default function App(): any {
               courseCode={selectedCourse.code}
               books={materialBooks}
               courseChapters={courseChapters}
+              hasActiveAccess={hasActiveBundle || selectedCourseIds.includes(selectedCourse.id)}
               chaptersByBookId={appData.chaptersByBookId}
               chapterBodyByChapterId={appData.chapterBodyByChapterId}
               isCourseDownloaded={downloadedCourseIds.includes(selectedCourse.id)}
@@ -705,16 +716,21 @@ export default function App(): any {
                 setCourseTopTab('MATERIAL');
               }
             }}
-            allScopedCourses={departmentScopedCourses.map((c) => ({
-              item: c,
-              canOpenNow: selectedCourseIds.includes(c.id),
-              accessBadge: selectedCourseIds.includes(c.id)
-                ? 'Included'
-                : c.freeAccess
-                ? 'Free'
-                : 'Locked',
-              updateAvailable: false,
-            }))}
+            allScopedCourses={departmentScopedCourses.map((c) => {
+              const isIncluded =
+                selectedCourseIds.includes(c.id) ||
+                (hasActiveBundle && (selectedCourseIds.length === 0 || selectedCourseIds.includes(c.id)));
+              return {
+                item: c,
+                canOpenNow: isIncluded || c.freeAccess,
+                accessBadge: isIncluded
+                  ? 'Included'
+                  : c.freeAccess
+                  ? 'Free'
+                  : 'Locked',
+                updateAvailable: false,
+              };
+            })}
           />
         ) : activeTab === 'PROGRESS' ? (
           <ProgressTabScreens
@@ -778,6 +794,7 @@ export default function App(): any {
               setThemeMode((prev) => (prev === 'light' ? 'dark' : 'light'))
             }
             onOpenDownloadsManager={() => setShowDownloads(true)}
+            onCheckApprovalStatus={syncStudentSummary}
             onChangeUiLanguage={() => {}}
             onReleaseDeviceAndLogout={() => {
               setIsAuthenticated(false);
