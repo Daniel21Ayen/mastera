@@ -831,6 +831,7 @@ export default function App(): any {
                 }
 
                 const hosts = getCandidateHosts();
+                let lastError = '';
                 for (const host of hosts) {
                   try {
                     const res = await fetch(`${host}/orders`, {
@@ -844,16 +845,22 @@ export default function App(): any {
                     if (res.ok) {
                       const resJson = await res.json();
                       console.log('[Order Submitted Successfully]', resJson);
-                      break;
+                      setPendingOrdersCount((c) => c + 1);
+                      return { success: true, orderId: resJson?.id || resJson?.orderId };
                     } else {
-                      console.warn('[Order submission status]', res.status, await res.text());
+                      const errBody = await res.text();
+                      lastError = `Server error ${res.status}: ${errBody}`;
+                      console.warn('[Order submission status]', res.status, errBody);
                     }
                   } catch (hostErr: any) {
+                    lastError = hostErr.message;
                     console.warn('[Order submission host error]', host, hostErr.message);
                   }
                 }
-              } catch (err) {
+                return { success: false, error: lastError || 'Could not connect to Mastera backend' };
+              } catch (err: any) {
                 console.error('[onSubmitBundleOrder Error]', err);
+                return { success: false, error: err?.message || 'Unexpected submission error' };
               }
             }}
             bundlePriceETB={bundlePriceETB}

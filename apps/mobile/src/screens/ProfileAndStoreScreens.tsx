@@ -99,7 +99,7 @@ export interface ProfileAndStoreScreensProps {
     receiptUri?: string | undefined;
     receiptFileName?: string | undefined;
     receiptMimeType?: string | undefined;
-  }) => void;
+  }) => Promise<{ success: boolean; orderId?: string; error?: string } | void> | void;
   themeMode?: ThemeMode;
   onToggleTheme?: () => void;
 }
@@ -133,6 +133,7 @@ export function ProfileAndStoreScreens({
   onToggleTheme,
 }: ProfileAndStoreScreensProps): React.ReactElement {
   const [screen, setScreen] = useState<ProfileFlowScreen>(initialScreen);
+  const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
 
   React.useEffect(() => {
     if (initialScreen) {
@@ -2396,7 +2397,7 @@ export function ProfileAndStoreScreens({
         </View>
 
         <TouchableOpacity
-          onPress={() => {
+          onPress={async () => {
             setAccountSetupAttempted(true);
             if (setupFullName.trim().length < 2) {
               Alert.alert('Full Name Required', 'Please enter your full name before submitting.');
@@ -2417,37 +2418,54 @@ export function ProfileAndStoreScreens({
               return;
             }
 
-            onSubmitBundleOrder({
-              selectedCourseIds: Array.from(bundleCheckedIds),
-              paymentMethodId: selectedProviderId,
-              transactionReference: txRef.trim(),
-              fullName: setupFullName.trim(),
-              phoneNumber: setupPhone.trim(),
-              password: setupPassword.trim(),
-              receiptBase64: receiptImage?.base64 || '',
-              receiptUri: receiptImage?.uri,
-              receiptFileName: receiptImage?.fileName,
-              receiptMimeType: receiptImage?.mimeType,
-            });
-            setScreen('ORDER_STATUS_PENDING');
+            try {
+              setIsSubmittingOrder(true);
+              const result = await onSubmitBundleOrder({
+                selectedCourseIds: Array.from(bundleCheckedIds),
+                paymentMethodId: selectedProviderId,
+                transactionReference: txRef.trim(),
+                fullName: setupFullName.trim(),
+                phoneNumber: setupPhone.trim(),
+                password: setupPassword.trim(),
+                receiptBase64: receiptImage?.base64 || '',
+                receiptUri: receiptImage?.uri,
+                receiptFileName: receiptImage?.fileName,
+                receiptMimeType: receiptImage?.mimeType,
+              });
+
+              if (result && !result.success) {
+                Alert.alert(
+                  'Submission Failed',
+                  result.error || 'Server rejected the order. Please check network connection and retry.'
+                );
+              } else {
+                setScreen('ORDER_STATUS_PENDING');
+              }
+            } catch (err: any) {
+              Alert.alert('Submission Error', err?.message || 'An error occurred during submission.');
+            } finally {
+              setIsSubmittingOrder(false);
+            }
           }}
+          disabled={isSubmittingOrder}
           style={[
             styles.primaryBtn,
             {
               backgroundColor: tokens.primary,
               opacity:
-                setupFullName.trim().length >= 2 &&
-                setupPhone.trim().length >= 9 &&
-                setupPassword.trim().length >= 4
-                  ? 1
-                  : 0.65,
+                isSubmittingOrder ||
+                setupFullName.trim().length < 2 ||
+                setupPhone.trim().length < 9 ||
+                setupPassword.trim().length < 4
+                  ? 0.65
+                  : 1,
               marginTop: SPACING.lg,
             },
           ]}
           activeOpacity={0.8}
         >
           <Text style={[styles.primaryBtnText, { color: tokens.surface }]}>
-            Submit for review
+            {isSubmittingOrder ? 'Submitting order...' : 'Submit for review'}
           </Text>
         </TouchableOpacity>
       </ScrollView>

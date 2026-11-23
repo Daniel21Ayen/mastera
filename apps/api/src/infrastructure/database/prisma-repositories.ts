@@ -1957,15 +1957,19 @@ export class PrismaAssessmentRepository implements AssessmentRepositoryPort {
         targetType === 'EXAM_SET'
           ? { examSetId: targetId }
           : { quizChapterId: targetId };
-      await tx.question.updateMany({
+      const subsequentQuestions = await tx.question.findMany({
         where: {
           ...condition,
           displayNumber: { gt: deletedDisplayNumber },
         },
-        data: {
-          displayNumber: { decrement: 1 },
-        },
+        orderBy: { displayNumber: 'asc' },
       });
+      for (const q of subsequentQuestions) {
+        await tx.question.update({
+          where: { id: q.id },
+          data: { displayNumber: q.displayNumber - 1 },
+        });
+      }
     });
   }
 
