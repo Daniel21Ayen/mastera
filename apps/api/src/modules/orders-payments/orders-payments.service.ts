@@ -98,6 +98,7 @@ export interface OrdersRepositoryPort {
     entitlements: Omit<EntitlementRecordDto, 'id'>[]
   ): Promise<EntitlementRecordDto[]>;
   listStudentEntitlements(studentId: string): Promise<EntitlementRecordDto[]>;
+  findFreshmanPackageCourseIds?(stream: string): Promise<string[]>;
 }
 
 /**
@@ -214,10 +215,26 @@ export class OrdersPaymentsService {
     }
 
     // 2. First purchase from local/unregistered student MUST be a bundle (PUR-01, PUR-03, Section 5.3)
-    if (!authenticatedStudentId && dto.productType === 'EXTRA_SINGLE_COURSE') {
-      throw new Error(
-        `${mastera_ERROR_CODES.SINGLE_COURSE_BUNDLE_REQUIRED}: First purchase must be a valid batch, semester, or full-course bundle.`
-      );
+    // Single courses can only be purchased after an active bundle has been purchased (PUR-01, PUR-06, Section 6.5)
+    if (dto.productType === 'EXTRA_SINGLE_COURSE') {
+      let hasActiveBundle = false;
+      const targetStudentId = authenticatedStudentId;
+      if (targetStudentId) {
+        const ents = await this.repo.listStudentEntitlements(targetStudentId);
+        hasActiveBundle = ents.some(
+          (e) =>
+            e.status === 'ACTIVE' &&
+            (e.productType === 'SEMESTER_BUNDLE' ||
+              e.productType === 'FULL_COURSE_BUNDLE' ||
+              e.productType === 'BATCH_BUNDLE') &&
+            new Date(e.expiresAt).getTime() > nowMs
+        );
+      }
+      if (!hasActiveBundle) {
+        throw new Error(
+          `${mastera_ERROR_CODES.SINGLE_COURSE_BUNDLE_REQUIRED}: Single courses can only be purchased after purchasing a semester bundle or full freshman package.`
+        );
+      }
     }
 
     // 3. Existing paid student collision / takeover protection (Section 3.2, Section 5.5, FR-A09)
@@ -403,11 +420,40 @@ export class OrdersPaymentsService {
         });
       }
 
-      const coveredCourseIds =
-        order.quoteSnapshot.perCourseBreakdown &&
-        order.quoteSnapshot.perCourseBreakdown.length > 0
-          ? order.quoteSnapshot.perCourseBreakdown.map((item) => item.courseId)
-          : order.pendingProfile.selectedCourseIds || [];
+      const isFullPackage =
+        order.orderType === 'FULL_COURSE_BUNDLE' ||
+        order.orderType === 'BOTH_STREAMS_PACKAGE' ||
+        (order.expectedAmountETB >= 350 && order.orderType !== 'EXTRA_SINGLE_COURSE');
+
+      const effectiveProductType = isFullPackage ? 'FULL_COURSE_BUNDLE' : order.orderType;
+
+      let coveredCourseIds: string[] = [];
+
+      if (isFullPackage && this.repo.findFreshmanPackageCourseIds) {
+        const stream = (order.pendingProfile.stream || student.stream || 'NATURAL').toUpperCase();
+        const packageCourseIds = await this.repo.findFreshmanPackageCourseIds(stream);
+        const unionSet = new Set<string>([
+          ...packageCourseIds,
+          ...(order.pendingProfile.selectedCourseIds || []),
+          ...(order.quoteSnapshot.perCourseBreakdown?.map((item) => item.courseId) || []),
+        ]);
+        coveredCourseIds = Array.from(unionSet);
+      } else if (order.orderType === 'EXTRA_SINGLE_COURSE') {
+        const singleId =
+          order.quoteSnapshot.perCourseBreakdown?.[0]?.courseId ||
+          order.pendingProfile.selectedCourseIds?.[0];
+        coveredCourseIds = singleId ? [singleId] : [];
+      } else {
+        coveredCourseIds =
+          order.quoteSnapshot.perCourseBreakdown &&
+          order.quoteSnapshot.perCourseBreakdown.length > 0
+            ? order.quoteSnapshot.perCourseBreakdown.map((item) => item.courseId)
+            : order.pendingProfile.selectedCourseIds || [];
+      }
+
+      if (coveredCourseIds.length === 0 && order.pendingProfile.selectedCourseIds) {
+        coveredCourseIds = order.pendingProfile.selectedCourseIds;
+      }
 
       const createdEntitlements = await this.repo.insertEntitlementsInTx(
         tx,
@@ -415,7 +461,7 @@ export class OrdersPaymentsService {
           studentId: student.id,
           orderId: order.id,
           courseId,
-          productType: order.orderType,
+          productType: effectiveProductType,
           startsAt: approvalTimestampIso, // D38: starts at approval timestamp
           expiresAt: expiresAtIso,
           status: 'ACTIVE',
@@ -425,6 +471,7 @@ export class OrdersPaymentsService {
       const updatedOrder = await this.repo.updateOrder(order.id, {
         studentId: student.id,
         status: 'APPROVED',
+        orderType: effectiveProductType,
         reviewedByAdminId: actor.adminId,
         approvedAt: approvalTimestampIso,
       });

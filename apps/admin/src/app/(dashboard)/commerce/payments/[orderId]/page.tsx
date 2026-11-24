@@ -168,7 +168,12 @@ export default function PaymentOrderDetailPage({ params }: PaymentDetailPageProp
     university: dbOrder.universityName || profile.universityName || profile.universityId || 'Not Specified',
     department: dbOrder.programName || profile.programName || profile.programId || 'Not Specified',
     semester: profile.semester ? `Semester ${profile.semester}` : 'Semester 1',
-    productType: dbOrder.orderType ? String(dbOrder.orderType).replace(/_/g, ' ') : 'Package Bundle',
+    productType:
+      dbOrder.orderType === 'FULL_COURSE_BUNDLE' || (dbOrder.expectedAmountETB >= 350 && dbOrder.orderType !== 'EXTRA_SINGLE_COURSE')
+        ? 'Full Freshman Package'
+        : dbOrder.orderType
+        ? String(dbOrder.orderType).replace(/_/g, ' ')
+        : 'Package Bundle',
     courses: Array.isArray(dbOrder.courseNames) && dbOrder.courseNames.length > 0
       ? dbOrder.courseNames
       : Array.isArray(profile.selectedCourseIds) && profile.selectedCourseIds.length > 0

@@ -93,6 +93,8 @@ export interface ProfileAndStoreScreensProps {
     selectedCourseIds: string[];
     paymentMethodId: string;
     transactionReference: string;
+    productType?: 'SEMESTER_BUNDLE' | 'FULL_COURSE_BUNDLE' | 'EXTRA_SINGLE_COURSE';
+    amountETB?: number;
     fullName?: string | undefined;
     phoneNumber?: string | undefined;
     password?: string | undefined;
@@ -155,6 +157,9 @@ export function ProfileAndStoreScreens({
   const [copiedMethodId, setCopiedMethodId] = useState<string | null>(null);
   const [receiptAttached, setReceiptAttached] = useState<boolean>(false);
   const [receiptImage, setReceiptImage] = useState<PickedReceiptImage | null>(null);
+  const [selectedProductType, setSelectedProductType] = useState<
+    'SEMESTER_BUNDLE' | 'FULL_COURSE_BUNDLE' | 'EXTRA_SINGLE_COURSE'
+  >('SEMESTER_BUNDLE');
   const [checkoutAttempted, setCheckoutAttempted] = useState<boolean>(false);
   const [accountSetupAttempted, setAccountSetupAttempted] = useState<boolean>(false);
   const [bundleCheckedIds, setBundleCheckedIds] = useState<Set<string>>(
@@ -1610,7 +1615,10 @@ export function ProfileAndStoreScreens({
 
         <View style={styles.listCol}>
           <TouchableOpacity
-            onPress={() => setScreen('BUNDLE_BUILDER')}
+            onPress={() => {
+              setSelectedProductType('SEMESTER_BUNDLE');
+              setScreen('BUNDLE_BUILDER');
+            }}
             style={[
               styles.storeCard,
               { backgroundColor: tokens.surface, borderColor: tokens.primary },
@@ -1630,7 +1638,10 @@ export function ProfileAndStoreScreens({
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => setScreen('PAYMENT_CHECKOUT')}
+            onPress={() => {
+              setSelectedProductType('FULL_COURSE_BUNDLE');
+              setScreen('PAYMENT_CHECKOUT');
+            }}
             style={[
               styles.storeCard,
               { backgroundColor: tokens.surface, borderColor: tokens.border },
@@ -1641,7 +1652,7 @@ export function ProfileAndStoreScreens({
                 Full Freshman Package
               </Text>
               <Text style={[styles.storeCardSub, { color: tokens.textMuted }]}>
-                All courses of the stream
+                All courses of your stream + Common
               </Text>
             </View>
             <Text style={[styles.priceTag, { color: tokens.primary }]}>
@@ -1650,34 +1661,96 @@ export function ProfileAndStoreScreens({
           </TouchableOpacity>
 
           <TouchableOpacity
+            onPress={() => {
+              if (!hasActiveBundle) {
+                Alert.alert(
+                  'Bundle Required',
+                  'Single courses can only be purchased after purchasing a semester bundle or full freshman package (SRS Section 3.4 & 6.5).'
+                );
+                return;
+              }
+              setSelectedProductType('EXTRA_SINGLE_COURSE');
+              setScreen('BUNDLE_BUILDER');
+            }}
             style={[
               styles.storeCard,
-              { backgroundColor: tokens.surface, borderColor: tokens.border },
+              {
+                backgroundColor: tokens.surface,
+                borderColor: tokens.border,
+                opacity: hasActiveBundle ? 1 : 0.65,
+              },
             ]}
           >
             <View>
-              <Text style={[styles.storeCardTitle, { color: tokens.textPrimary }]}>
-                Single course
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={[styles.storeCardTitle, { color: tokens.textPrimary }]}>
+                  Single course
+                </Text>
+                {!hasActiveBundle && (
+                  <View
+                    style={{
+                      backgroundColor: tokens.border,
+                      paddingHorizontal: 6,
+                      paddingVertical: 2,
+                      borderRadius: 4,
+                    }}
+                  >
+                    <Text style={{ fontSize: 10, color: tokens.textMuted, fontWeight: '700' }}>
+                      LOCKED
+                    </Text>
+                  </View>
+                )}
+              </View>
               <Text style={[styles.storeCardSub, { color: tokens.textMuted }]}>
-                Buy one course first
+                {hasActiveBundle ? 'Add one course (60 ETB)' : 'Buy semester bundle or full package first'}
               </Text>
             </View>
             <MasteraIcon name="chevron-right" size={18} color={tokens.textMuted} />
           </TouchableOpacity>
 
           <TouchableOpacity
+            onPress={() => {
+              if (!hasActiveBundle) {
+                Alert.alert(
+                  'Bundle Required',
+                  'Single courses can only be purchased after purchasing a semester bundle or full freshman package (SRS Section 3.4 & 6.5).'
+                );
+                return;
+              }
+              setSelectedProductType('EXTRA_SINGLE_COURSE');
+              setScreen('BUNDLE_BUILDER');
+            }}
             style={[
               styles.storeCard,
-              { backgroundColor: tokens.surface, borderColor: tokens.border },
+              {
+                backgroundColor: tokens.surface,
+                borderColor: tokens.border,
+                opacity: hasActiveBundle ? 1 : 0.65,
+              },
             ]}
           >
             <View>
-              <Text style={[styles.storeCardTitle, { color: tokens.textPrimary }]}>
-                Extra course
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={[styles.storeCardTitle, { color: tokens.textPrimary }]}>
+                  Extra course
+                </Text>
+                {!hasActiveBundle && (
+                  <View
+                    style={{
+                      backgroundColor: tokens.border,
+                      paddingHorizontal: 6,
+                      paddingVertical: 2,
+                      borderRadius: 4,
+                    }}
+                  >
+                    <Text style={{ fontSize: 10, color: tokens.textMuted, fontWeight: '700' }}>
+                      LOCKED
+                    </Text>
+                  </View>
+                )}
+              </View>
               <Text style={[styles.storeCardSub, { color: tokens.textMuted }]}>
-                Add beyond the bundle
+                {hasActiveBundle ? 'Add beyond the bundle' : 'Buy semester bundle or full package first'}
               </Text>
             </View>
             <MasteraIcon name="chevron-right" size={18} color={tokens.textMuted} />
@@ -1799,13 +1872,40 @@ export function ProfileAndStoreScreens({
       paymentMethods.find((p) => p.id === selectedProviderId) ??
       paymentMethods[0];
 
+    const checkoutAmountETB =
+      selectedProductType === 'FULL_COURSE_BUNDLE'
+        ? freshmanPackagePriceETB
+        : selectedProductType === 'EXTRA_SINGLE_COURSE'
+        ? 60
+        : bundlePriceETB;
+
+    const checkoutDurationDays =
+      selectedProductType === 'FULL_COURSE_BUNDLE'
+        ? 300
+        : selectedProductType === 'EXTRA_SINGLE_COURSE'
+        ? 90
+        : bundleDurationDays;
+
+    const checkoutTitle =
+      selectedProductType === 'FULL_COURSE_BUNDLE'
+        ? 'Full Freshman Package'
+        : selectedProductType === 'EXTRA_SINGLE_COURSE'
+        ? 'Single Course'
+        : 'Semester Bundle';
+
     return (
       <ScrollView
         style={[styles.container, { backgroundColor: tokens.background }]}
         contentContainerStyle={styles.scrollContent}
       >
         <View style={styles.headerBackRow}>
-          {renderBackArrow(() => setScreen('BUNDLE_BUILDER'))}
+          {renderBackArrow(() =>
+            setScreen(
+              selectedProductType === 'SEMESTER_BUNDLE'
+                ? 'BUNDLE_BUILDER'
+                : 'STORE_CATALOG'
+            )
+          )}
           <Text style={[styles.screenTitleWithBack, { color: tokens.textPrimary }]}>
             Payment
           </Text>
@@ -1813,10 +1913,10 @@ export function ProfileAndStoreScreens({
 
         <View style={styles.paymentSummaryBox}>
           <Text style={[styles.paymentAmountTitle, { color: tokens.textPrimary }]}>
-            Send exactly {bundlePriceETB} ETB
+            Send exactly {checkoutAmountETB} ETB
           </Text>
           <Text style={[styles.paymentDurationSub, { color: tokens.primary }]}>
-            {bundleDurationDays} days access after approval
+            {checkoutTitle} · {checkoutDurationDays} days access after approval
           </Text>
         </View>
 
@@ -2431,8 +2531,24 @@ export function ProfileAndStoreScreens({
 
             try {
               setIsSubmittingOrder(true);
+              const checkoutAmountETB =
+                selectedProductType === 'FULL_COURSE_BUNDLE'
+                  ? freshmanPackagePriceETB
+                  : selectedProductType === 'EXTRA_SINGLE_COURSE'
+                  ? 60
+                  : bundlePriceETB;
+
+              const courseIdsToSubmit =
+                selectedProductType === 'FULL_COURSE_BUNDLE'
+                  ? departmentCourses.map((c) => c.id)
+                  : selectedProductType === 'EXTRA_SINGLE_COURSE'
+                  ? Array.from(bundleCheckedIds).slice(0, 1)
+                  : Array.from(bundleCheckedIds);
+
               const result = await onSubmitBundleOrder({
-                selectedCourseIds: Array.from(bundleCheckedIds),
+                selectedCourseIds: courseIdsToSubmit,
+                productType: selectedProductType,
+                amountETB: checkoutAmountETB,
                 paymentMethodId: selectedProviderId,
                 transactionReference: txRef.trim(),
                 fullName: setupFullName.trim(),

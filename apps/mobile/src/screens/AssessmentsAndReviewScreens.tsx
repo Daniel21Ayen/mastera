@@ -67,10 +67,18 @@ export function CourseTestsQuizFlowScreen({
   const [activeQuizTab, setActiveQuizTab] = useState<QuizTarget>('QUIZ_1');
   const [activeChapter, setActiveChapter] =
     useState<CatalogChapterMetaDto | null>(null);
+  const [pendingChapter, setPendingChapter] =
+    useState<CatalogChapterMetaDto | null>(null);
+  const [quizMode, setQuizMode] = useState<'PRACTICE' | 'EXAM'>('PRACTICE');
+  const [navMode, setNavMode] = useState<'PAGED' | 'SCROLL'>('PAGED');
+  const [stage, setStage] = useState<'CHAPTERS' | 'RUNNING' | 'REVIEW'>('CHAPTERS');
   const [questionIndex, setQuestionIndex] = useState<number>(0);
   const [selectedAnswers, setSelectedAnswers] = useState<
     Record<string, string>
   >({});
+  const [expandedQuestionIds, setExpandedQuestionIds] = useState<Set<string>>(
+    new Set()
+  );
 
   const tokens = STUDENT_THEMES[themeMode];
 
@@ -81,19 +89,313 @@ export function CourseTestsQuizFlowScreen({
       ? 'Quiz 2'
       : 'Quiz 3';
 
-  // STEP 2: Practice Question Runner (Runs when a chapter card is tapped)
-  if (activeChapter) {
+  // ==========================================================================
+  // STAGE 3: ANSWER REVIEW (Shown after Exam submission or Practice completion)
+  // ==========================================================================
+  if (stage === 'REVIEW' && activeChapter) {
     const questions = questionsByChapterId[activeChapter.id] ?? [];
-    const currentQ = questions[questionIndex] ?? questions[0];
+    const score = questions.filter(
+      (q) => selectedAnswers[q.id] === q.correctOptionId
+    ).length;
+    const percent =
+      questions.length > 0 ? Math.round((score / questions.length) * 100) : 0;
+    const isPassed = percent >= 50;
 
-    if (!currentQ) {
+    return (
+      <ScrollView
+        style={[styles.container, { backgroundColor: tokens.background }]}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* Top Header Row with Back Arrow */}
+        <View style={styles.topNavRow}>
+          <TouchableOpacity
+            onPress={() => {
+              setStage('CHAPTERS');
+              setActiveChapter(null);
+            }}
+            style={styles.backBtnRow}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            activeOpacity={0.7}
+          >
+            <View
+              style={[
+                styles.topBackArrowBtn,
+                { backgroundColor: tokens.surface, borderColor: tokens.border },
+              ]}
+            >
+              <MasteraIcon
+                name="chevron-left"
+                size={18}
+                color={tokens.textPrimary}
+              />
+            </View>
+            <Text style={[styles.backBtnText, { color: tokens.textPrimary }]}>
+              {quizTabLabel} · Answer Review
+            </Text>
+          </TouchableOpacity>
+
+          <View
+            style={[
+              styles.badgePill,
+              {
+                backgroundColor: isPassed
+                  ? tokens.successSoft
+                  : tokens.dangerSoft,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.badgePillText,
+                { color: isPassed ? tokens.success : tokens.danger },
+              ]}
+            >
+              {isPassed ? 'Passed' : 'Needs Review'}
+            </Text>
+          </View>
+        </View>
+
+        {/* Score & Completion Banner */}
+        <View
+          style={[
+            styles.bannerBox,
+            {
+              backgroundColor: tokens.surface,
+              borderColor: tokens.border,
+              borderWidth: 1,
+              borderRadius: RADIUS.lg,
+              padding: SPACING.lg,
+              marginVertical: SPACING.md,
+            },
+          ]}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View>
+              <Text style={{ fontSize: 13, color: tokens.textMuted }}>
+                {quizMode === 'EXAM' ? 'Exam Mode Results' : 'Practice Mode Summary'}
+              </Text>
+              <Text
+                style={{
+                  fontSize: 26,
+                  fontWeight: '800',
+                  color: isPassed ? tokens.success : tokens.amber,
+                  marginTop: 2,
+                }}
+              >
+                {score} / {questions.length} ({percent}%)
+              </Text>
+            </View>
+            <View
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 24,
+                backgroundColor: isPassed ? tokens.successSoft : tokens.amberSoft,
+                justifyContent: 'center',
+                alignItems: 'center',
+              }}
+            >
+              <MasteraIcon
+                name={isPassed ? 'check-circle' : 'award'}
+                size={24}
+                color={isPassed ? tokens.success : tokens.amber}
+              />
+            </View>
+          </View>
+          <Text style={{ fontSize: 13, color: tokens.textMuted, marginTop: 8 }}>
+            {isPassed
+              ? 'Great job! You have demonstrated mastery of these quiz concepts.'
+              : 'Review the detailed explanations below to improve your understanding.'}
+          </Text>
+        </View>
+
+        {/* Toggle All Explanations */}
+        <View
+          style={{
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: SPACING.sm,
+          }}
+        >
+          <Text
+            style={{
+              fontSize: 14,
+              fontWeight: '700',
+              color: tokens.textPrimary,
+            }}
+          >
+            Questions Breakdown ({questions.length})
+          </Text>
+          <TouchableOpacity
+            onPress={() => {
+              if (expandedQuestionIds.size === questions.length) {
+                setExpandedQuestionIds(new Set());
+              } else {
+                setExpandedQuestionIds(new Set(questions.map((q) => q.id)));
+              }
+            }}
+            style={[styles.outlineSmallBtn, { borderColor: tokens.primary }]}
+          >
+            <Text style={[styles.outlineSmallBtnText, { color: tokens.primary }]}>
+              {expandedQuestionIds.size === questions.length
+                ? 'Hide all'
+                : 'Show all explanations'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Per-Question Review Cards */}
+        <View style={styles.reviewCol}>
+          {questions.map((q, idx) => {
+            const chosen = selectedAnswers[q.id];
+            const isCorrect = chosen === q.correctOptionId;
+            const isExpanded = expandedQuestionIds.has(q.id);
+
+            return (
+              <View
+                key={q.id}
+                style={[
+                  styles.reviewCard,
+                  {
+                    backgroundColor: tokens.surface,
+                    borderColor: isCorrect ? tokens.success : tokens.danger,
+                  },
+                ]}
+              >
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    marginBottom: 4,
+                  }}
+                >
+                  <MasteraIcon
+                    name={isCorrect ? 'check-circle' : 'x-circle'}
+                    size={16}
+                    color={isCorrect ? tokens.success : tokens.danger}
+                  />
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      fontWeight: '700',
+                      color: isCorrect ? tokens.success : tokens.danger,
+                      marginLeft: 6,
+                    }}
+                  >
+                    Question {idx + 1} · {isCorrect ? 'Correct' : 'Incorrect'}
+                  </Text>
+                </View>
+
+                <Text
+                  style={[styles.reviewPrompt, { color: tokens.textPrimary }]}
+                >
+                  {q.promptLatex}
+                </Text>
+
+                <Text
+                  style={[styles.reviewAnswerMeta, { color: tokens.textMuted }]}
+                >
+                  Your Answer:{' '}
+                  <Text
+                    style={{
+                      fontWeight: '700',
+                      color: isCorrect ? tokens.success : tokens.danger,
+                    }}
+                  >
+                    {chosen ? `Option ${chosen}` : 'Unanswered'}
+                  </Text>
+                  {'  ·  '}Correct:{' '}
+                  <Text style={{ fontWeight: '700', color: tokens.success }}>
+                    Option {q.correctOptionId}
+                  </Text>
+                </Text>
+
+                {isExpanded ? (
+                  <View
+                    style={{
+                      marginTop: SPACING.xs,
+                      padding: SPACING.sm,
+                      borderRadius: RADIUS.sm,
+                      backgroundColor: tokens.background,
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.reviewExplanation,
+                        { color: tokens.textPrimary },
+                      ]}
+                    >
+                      {q.explanationLatex ||
+                        'Detailed academic explanation provided for this concept.'}
+                    </Text>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    onPress={() =>
+                      setExpandedQuestionIds((prev) => {
+                        const next = new Set(prev);
+                        next.add(q.id);
+                        return next;
+                      })
+                    }
+                    style={[
+                      styles.explanationBtn,
+                      { borderColor: tokens.primary, marginTop: SPACING.xs },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.explanationBtnText,
+                        { color: tokens.primary },
+                      ]}
+                    >
+                      Show explanation
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            );
+          })}
+        </View>
+
+        <TouchableOpacity
+          onPress={() => {
+            setStage('CHAPTERS');
+            setActiveChapter(null);
+          }}
+          style={[
+            styles.primaryActionBtn,
+            { backgroundColor: tokens.primary, marginTop: SPACING.lg },
+          ]}
+        >
+          <Text
+            style={[styles.primaryActionBtnText, { color: tokens.surface }]}
+          >
+            Back to {quizTabLabel} Chapters
+          </Text>
+        </TouchableOpacity>
+      </ScrollView>
+    );
+  }
+
+  // ==========================================================================
+  // STAGE 2: QUESTION RUNNER (Dual Modes: PRACTICE vs EXAM, Dual Nav: PAGED vs SCROLL)
+  // ==========================================================================
+  if (stage === 'RUNNING' && activeChapter) {
+    const questions = questionsByChapterId[activeChapter.id] ?? [];
+
+    if (questions.length === 0) {
       return (
         <ScrollView
           style={[styles.container, { backgroundColor: tokens.background }]}
           contentContainerStyle={styles.scrollContent}
         >
           <TouchableOpacity
-            onPress={() => setActiveChapter(null)}
+            onPress={() => {
+              setStage('CHAPTERS');
+              setActiveChapter(null);
+            }}
             style={styles.backBtnRow}
           >
             <MasteraIcon name="chevron-left" size={18} color={tokens.textPrimary} />
@@ -108,19 +410,21 @@ export function CourseTestsQuizFlowScreen({
       );
     }
 
+    const isPractice = quizMode === 'PRACTICE';
+    const currentQ = questions[questionIndex] ?? questions[0]!;
     const chosenOptionId = selectedAnswers[currentQ.id];
-    const progressRatio =
-      questions.length > 0 ? (questionIndex + 1) / questions.length : 1;
+    const progressRatio = (questionIndex + 1) / questions.length;
 
     return (
       <ScrollView
         style={[styles.container, { backgroundColor: tokens.background }]}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* Top Header */}
+        {/* Top Header Row */}
         <View style={styles.topNavRow}>
           <TouchableOpacity
             onPress={() => {
+              setStage('CHAPTERS');
               setActiveChapter(null);
               setQuestionIndex(0);
             }}
@@ -136,209 +440,506 @@ export function CourseTestsQuizFlowScreen({
             </Text>
           </TouchableOpacity>
 
-          <View style={[styles.badgePill, { backgroundColor: tokens.primarySoft }]}>
-            <Text style={[styles.badgePillText, { color: tokens.primary }]}>
-              {questionIndex + 1} / {questions.length}
+          {/* Dual Navigation Switcher Pill: [ 📄 Pages | 📜 Scroll ] */}
+          <View
+            style={{
+              flexDirection: 'row',
+              backgroundColor: tokens.surface,
+              borderRadius: RADIUS.pill,
+              borderWidth: 1,
+              borderColor: tokens.border,
+              padding: 2,
+            }}
+          >
+            <TouchableOpacity
+              onPress={() => setNavMode('PAGED')}
+              style={{
+                paddingHorizontal: 8,
+                paddingVertical: 3,
+                borderRadius: RADIUS.pill,
+                backgroundColor: navMode === 'PAGED' ? tokens.primary : 'transparent',
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 11,
+                  fontWeight: '700',
+                  color: navMode === 'PAGED' ? tokens.surface : tokens.textMuted,
+                }}
+              >
+                📄 Pages
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setNavMode('SCROLL')}
+              style={{
+                paddingHorizontal: 8,
+                paddingVertical: 3,
+                borderRadius: RADIUS.pill,
+                backgroundColor: navMode === 'SCROLL' ? tokens.primary : 'transparent',
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 11,
+                  fontWeight: '700',
+                  color: navMode === 'SCROLL' ? tokens.surface : tokens.textMuted,
+                }}
+              >
+                📜 Scroll
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Mode Pill: Practice vs Exam */}
+          <View
+            style={[
+              styles.badgePill,
+              {
+                backgroundColor: isPractice ? tokens.primarySoft : tokens.amberSoft,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.badgePillText,
+                { color: isPractice ? tokens.primary : tokens.amber },
+              ]}
+            >
+              {isPractice ? 'Practice' : 'Exam Mode'}
             </Text>
           </View>
         </View>
 
-        {/* Horizontal Progress Bar */}
-        <View style={[styles.progressTrack, { backgroundColor: tokens.surface, borderColor: tokens.border }]}>
-          <View
-            style={[
-              styles.progressFill,
-              {
-                width: `${Math.round(progressRatio * 100)}%`,
-                backgroundColor: tokens.primary,
-              },
-            ]}
-          />
-        </View>
-
-        {/* Question Prompt */}
-        <Text style={[styles.questionPrompt, { color: tokens.textPrimary }]}>
-          {currentQ.promptLatex}
-        </Text>
-
-        {/* Answer Options */}
-        <View style={styles.optionsCol}>
-          {(currentQ.options ?? []).map((opt) => {
-            const isSelected = chosenOptionId === opt.id;
-            const hasAnswered = !!chosenOptionId;
-            const isCorrectOption = opt.id === currentQ.correctOptionId;
-
-            let optBg = tokens.surface;
-            let optBorder = tokens.border;
-            let optTextColor = tokens.textPrimary;
-            let optBadge: string | null = null;
-            let optBadgeColor = tokens.textMuted;
-
-            if (hasAnswered) {
-              if (isCorrectOption) {
-                optBg = tokens.successSoft;
-                optBorder = tokens.success;
-                optTextColor = tokens.success;
-                optBadge = isSelected ? '✓ Correct (Your answer)' : '✓ Correct answer';
-                optBadgeColor = tokens.success;
-              } else if (isSelected) {
-                optBg = tokens.dangerSoft;
-                optBorder = tokens.danger;
-                optTextColor = tokens.danger;
-                optBadge = '✗ Your answer (Incorrect)';
-                optBadgeColor = tokens.danger;
-              }
-            } else if (isSelected) {
-              optBg = tokens.primarySoft;
-              optBorder = tokens.primary;
-              optTextColor = tokens.primary;
-            }
-
-            return (
-              <TouchableOpacity
-                key={opt.id}
-                onPress={() =>
-                  setSelectedAnswers((prev) => ({
-                    ...prev,
-                    [currentQ.id]: opt.id,
-                  }))
-                }
+        {/* ------------------------------------------------------------------ */}
+        {/* VIEW A: PAGED STEP-BY-STEP RUNNER */}
+        {/* ------------------------------------------------------------------ */}
+        {navMode === 'PAGED' ? (
+          <View>
+            {/* Horizontal Progress Bar */}
+            <View style={[styles.progressTrack, { backgroundColor: tokens.surface, borderColor: tokens.border, marginTop: SPACING.xs }]}>
+              <View
                 style={[
-                  styles.optionBtn,
+                  styles.progressFill,
                   {
-                    backgroundColor: optBg,
-                    borderColor: optBorder,
-                    borderWidth: hasAnswered && (isCorrectOption || isSelected) ? 2 : 1,
+                    width: `${Math.round(progressRatio * 100)}%`,
+                    backgroundColor: isPractice ? tokens.primary : tokens.amber,
                   },
                 ]}
-                activeOpacity={0.8}
-              >
-                <View style={{ flex: 1 }}>
+              />
+            </View>
+
+            <Text
+              style={[
+                styles.helperText,
+                { color: tokens.textMuted, marginVertical: SPACING.xs },
+              ]}
+            >
+              Question {questionIndex + 1} of {questions.length}
+            </Text>
+
+            {/* Question Prompt */}
+            <Text style={[styles.questionPrompt, { color: tokens.textPrimary, fontSize: 17, marginBottom: SPACING.md }]}>
+              {currentQ.promptLatex}
+            </Text>
+
+            {/* Answer Options */}
+            <View style={styles.optionsCol}>
+              {(currentQ.options ?? []).map((opt) => {
+                const isSelected = chosenOptionId === opt.id;
+                const hasAnswered = !!chosenOptionId;
+                const isCorrectOption = opt.id === currentQ.correctOptionId;
+
+                let optBg = tokens.surface;
+                let optBorder = tokens.border;
+                let optTextColor = tokens.textPrimary;
+                let optBadge: string | null = null;
+                let optBadgeColor = tokens.textMuted;
+
+                if (isPractice && hasAnswered) {
+                  if (isCorrectOption) {
+                    optBg = tokens.successSoft;
+                    optBorder = tokens.success;
+                    optTextColor = tokens.success;
+                    optBadge = isSelected ? '✓ Correct (Your answer)' : '✓ Correct answer';
+                    optBadgeColor = tokens.success;
+                  } else if (isSelected) {
+                    optBg = tokens.dangerSoft;
+                    optBorder = tokens.danger;
+                    optTextColor = tokens.danger;
+                    optBadge = '✗ Your answer (Incorrect)';
+                    optBadgeColor = tokens.danger;
+                  }
+                } else if (isSelected) {
+                  optBg = isPractice ? tokens.primarySoft : tokens.amberSoft;
+                  optBorder = isPractice ? tokens.primary : tokens.amber;
+                  optTextColor = isPractice ? tokens.primary : tokens.textPrimary;
+                }
+
+                return (
+                  <TouchableOpacity
+                    key={opt.id}
+                    onPress={() =>
+                      setSelectedAnswers((prev) => ({
+                        ...prev,
+                        [currentQ.id]: opt.id,
+                      }))
+                    }
+                    style={[
+                      styles.optionBtn,
+                      {
+                        backgroundColor: optBg,
+                        borderColor: optBorder,
+                        borderWidth: isSelected || (isPractice && hasAnswered && isCorrectOption) ? 2 : 1,
+                      },
+                    ]}
+                    activeOpacity={0.8}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={[
+                          styles.optionText,
+                          {
+                            color: optTextColor,
+                            fontWeight: isSelected || (isPractice && hasAnswered && isCorrectOption) ? '700' : '500',
+                          },
+                        ]}
+                      >
+                        {opt.id}. {opt.textLatex || (opt as any).text}
+                      </Text>
+                      {optBadge && (
+                        <Text
+                          style={{
+                            fontSize: 12,
+                            fontWeight: '700',
+                            color: optBadgeColor,
+                            marginTop: 4,
+                          }}
+                        >
+                          {optBadge}
+                        </Text>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Immediate Explanation Card (Practice Mode Only) */}
+            {isPractice && (
+              chosenOptionId ? (
+                <View
+                  style={[
+                    styles.explanationBox,
+                    {
+                      backgroundColor:
+                        chosenOptionId === currentQ.correctOptionId
+                          ? tokens.successSoft
+                          : tokens.surface,
+                      borderColor:
+                        chosenOptionId === currentQ.correctOptionId
+                          ? tokens.success
+                          : tokens.border,
+                      borderWidth: 1.5,
+                      borderRadius: RADIUS.md,
+                      padding: SPACING.md,
+                      marginTop: SPACING.md,
+                    },
+                  ]}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+                    <MasteraIcon
+                      name={chosenOptionId === currentQ.correctOptionId ? 'check-circle' : 'info'}
+                      size={18}
+                      color={
+                        chosenOptionId === currentQ.correctOptionId
+                          ? tokens.success
+                          : tokens.danger
+                      }
+                    />
+                    <Text
+                      style={{
+                        fontSize: 14,
+                        fontWeight: '700',
+                        color:
+                          chosenOptionId === currentQ.correctOptionId
+                            ? tokens.success
+                            : tokens.danger,
+                        marginLeft: 8,
+                      }}
+                    >
+                      {chosenOptionId === currentQ.correctOptionId
+                        ? 'Correct Answer!'
+                        : `Incorrect · Option ${currentQ.correctOptionId} is correct`}
+                    </Text>
+                  </View>
                   <Text
                     style={[
-                      styles.optionText,
+                      styles.explanationText,
                       {
-                        color: optTextColor,
-                        fontWeight: isSelected || (hasAnswered && isCorrectOption) ? '700' : '500',
+                        color: tokens.textPrimary,
+                        fontSize: 13,
+                        lineHeight: 19,
                       },
                     ]}
                   >
-                    {opt.id}. {opt.textLatex || (opt as any).text}
+                    {currentQ.explanationLatex || 'Detailed explanation provided for academic concept.'}
                   </Text>
-                  {optBadge && (
-                    <Text
-                      style={{
-                        fontSize: 12,
-                        fontWeight: '700',
-                        color: optBadgeColor,
-                        marginTop: 4,
-                      }}
-                    >
-                      {optBadge}
-                    </Text>
-                  )}
                 </View>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+              ) : (
+                <View
+                  style={[
+                    styles.explanationBox,
+                    {
+                      backgroundColor: tokens.surface,
+                      borderColor: tokens.border,
+                      borderRadius: RADIUS.md,
+                      padding: SPACING.md,
+                      marginTop: SPACING.md,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.explanationText, { color: tokens.textMuted }]}>
+                    Select an answer above to see immediate feedback and full explanation.
+                  </Text>
+                </View>
+              )
+            )}
 
-        {/* Immediate Explanation Card */}
-        {chosenOptionId ? (
-          <View
-            style={[
-              styles.explanationBox,
-              {
-                backgroundColor:
-                  chosenOptionId === currentQ.correctOptionId
-                    ? tokens.successSoft
-                    : tokens.surface,
-                borderColor:
-                  chosenOptionId === currentQ.correctOptionId
-                    ? tokens.success
-                    : tokens.border,
-                borderWidth: 1.5,
-                borderRadius: RADIUS.md,
-                padding: SPACING.md,
-                marginTop: SPACING.md,
-              },
-            ]}
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
-              <MasteraIcon
-                name={chosenOptionId === currentQ.correctOptionId ? 'check-circle' : 'info'}
-                size={18}
-                color={
-                  chosenOptionId === currentQ.correctOptionId
-                    ? tokens.success
-                    : tokens.danger
-                }
-              />
-              <Text
-                style={{
-                  fontSize: 14,
-                  fontWeight: '700',
-                  color:
-                    chosenOptionId === currentQ.correctOptionId
-                      ? tokens.success
-                      : tokens.danger,
-                  marginLeft: 8,
-                }}
+            {/* Paged Navigation Row: Previous & Next */}
+            <View style={[styles.prevNextRow, { marginTop: SPACING.lg }]}>
+              <TouchableOpacity
+                disabled={questionIndex === 0}
+                onPress={() => setQuestionIndex((i) => Math.max(0, i - 1))}
+                style={[
+                  styles.prevNextBtn,
+                  {
+                    borderColor: isPractice ? tokens.primary : tokens.amber,
+                    backgroundColor: tokens.surface,
+                    opacity: questionIndex === 0 ? 0.4 : 1,
+                  },
+                ]}
               >
-                {chosenOptionId === currentQ.correctOptionId
-                  ? 'Correct Answer!'
-                  : `Incorrect · Option ${currentQ.correctOptionId} is correct`}
-              </Text>
+                <Text
+                  style={[
+                    styles.prevNextBtnText,
+                    { color: isPractice ? tokens.primary : tokens.amber },
+                  ]}
+                >
+                  Previous
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => {
+                  if (questionIndex + 1 < questions.length) {
+                    setQuestionIndex((i) => i + 1);
+                  } else {
+                    onCompleteQuizChapter(activeChapter.id, selectedAnswers);
+                    setStage('REVIEW');
+                  }
+                }}
+                style={[
+                  styles.prevNextBtn,
+                  {
+                    backgroundColor: isPractice ? tokens.primary : tokens.amber,
+                    borderColor: isPractice ? tokens.primary : tokens.amber,
+                  },
+                ]}
+              >
+                <Text style={[styles.prevNextBtnText, { color: tokens.surface }]}>
+                  {questionIndex + 1 < questions.length
+                    ? 'Next'
+                    : isPractice
+                    ? 'Finish Practice'
+                    : 'Submit Quiz'}
+                </Text>
+              </TouchableOpacity>
             </View>
-            <Text
-              style={[
-                styles.explanationText,
-                {
-                  color: tokens.textPrimary,
-                  fontSize: 13,
-                  lineHeight: 19,
-                },
-              ]}
-            >
-              {currentQ.explanationLatex || 'Detailed explanation provided for academic concept.'}
-            </Text>
           </View>
         ) : (
-          <View
-            style={[
-              styles.explanationBox,
-              {
-                backgroundColor: tokens.surface,
-                borderColor: tokens.border,
-                borderRadius: RADIUS.md,
-                padding: SPACING.md,
-                marginTop: SPACING.md,
-              },
-            ]}
-          >
-            <Text style={[styles.explanationText, { color: tokens.textMuted }]}>
-              Select an answer above to see immediate feedback and full explanation.
-            </Text>
+          /* ------------------------------------------------------------------ */
+          /* VIEW B: CONTINUOUS VERTICAL SCROLL RUNNER */
+          /* ------------------------------------------------------------------ */
+          <View style={{ gap: SPACING.lg, marginTop: SPACING.sm }}>
+            {questions.map((q, idx) => {
+              const qChosen = selectedAnswers[q.id];
+              const qAnswered = !!qChosen;
+              const qIsCorrect = qChosen === q.correctOptionId;
+
+              return (
+                <View
+                  key={q.id}
+                  style={{
+                    backgroundColor: tokens.surface,
+                    borderWidth: 1,
+                    borderColor: tokens.border,
+                    borderRadius: RADIUS.lg,
+                    padding: SPACING.md,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      fontWeight: '700',
+                      color: tokens.textMuted,
+                      marginBottom: 4,
+                    }}
+                  >
+                    Question {idx + 1} of {questions.length}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.questionPrompt,
+                      { color: tokens.textPrimary, fontSize: 16, marginBottom: SPACING.md },
+                    ]}
+                  >
+                    {q.promptLatex}
+                  </Text>
+
+                  <View style={styles.optionsCol}>
+                    {(q.options ?? []).map((opt) => {
+                      const isSelected = qChosen === opt.id;
+                      const isCorrectOpt = opt.id === q.correctOptionId;
+
+                      let optBg = tokens.surface;
+                      let optBorder = tokens.border;
+                      let optTextColor = tokens.textPrimary;
+                      let optBadge: string | null = null;
+                      let optBadgeColor = tokens.textMuted;
+
+                      if (isPractice && qAnswered) {
+                        if (isCorrectOpt) {
+                          optBg = tokens.successSoft;
+                          optBorder = tokens.success;
+                          optTextColor = tokens.success;
+                          optBadge = isSelected ? '✓ Correct (Your answer)' : '✓ Correct answer';
+                          optBadgeColor = tokens.success;
+                        } else if (isSelected) {
+                          optBg = tokens.dangerSoft;
+                          optBorder = tokens.danger;
+                          optTextColor = tokens.danger;
+                          optBadge = '✗ Your answer (Incorrect)';
+                          optBadgeColor = tokens.danger;
+                        }
+                      } else if (isSelected) {
+                        optBg = isPractice ? tokens.primarySoft : tokens.amberSoft;
+                        optBorder = isPractice ? tokens.primary : tokens.amber;
+                        optTextColor = isPractice ? tokens.primary : tokens.textPrimary;
+                      }
+
+                      return (
+                        <TouchableOpacity
+                          key={opt.id}
+                          onPress={() =>
+                            setSelectedAnswers((prev) => ({
+                              ...prev,
+                              [q.id]: opt.id,
+                            }))
+                          }
+                          style={[
+                            styles.optionBtn,
+                            {
+                              backgroundColor: optBg,
+                              borderColor: optBorder,
+                              borderWidth: isSelected || (isPractice && qAnswered && isCorrectOpt) ? 2 : 1,
+                            },
+                          ]}
+                          activeOpacity={0.8}
+                        >
+                          <View style={{ flex: 1 }}>
+                            <Text
+                              style={[
+                                styles.optionText,
+                                {
+                                  color: optTextColor,
+                                  fontWeight: isSelected || (isPractice && qAnswered && isCorrectOpt) ? '700' : '500',
+                                },
+                              ]}
+                            >
+                              {opt.id}. {opt.textLatex || (opt as any).text}
+                            </Text>
+                            {optBadge && (
+                              <Text
+                                style={{
+                                  fontSize: 12,
+                                  fontWeight: '700',
+                                  color: optBadgeColor,
+                                  marginTop: 4,
+                                }}
+                              >
+                                {optBadge}
+                              </Text>
+                            )}
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+
+                  {/* Immediate Explanation in Practice Mode */}
+                  {isPractice && qChosen && (
+                    <View
+                      style={[
+                        styles.explanationBox,
+                        {
+                          backgroundColor: qIsCorrect ? tokens.successSoft : tokens.surface,
+                          borderColor: qIsCorrect ? tokens.success : tokens.border,
+                          borderWidth: 1.5,
+                          borderRadius: RADIUS.md,
+                          padding: SPACING.md,
+                          marginTop: SPACING.md,
+                        },
+                      ]}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                        <MasteraIcon
+                          name={qIsCorrect ? 'check-circle' : 'info'}
+                          size={16}
+                          color={qIsCorrect ? tokens.success : tokens.danger}
+                        />
+                        <Text
+                          style={{
+                            fontSize: 13,
+                            fontWeight: '700',
+                            color: qIsCorrect ? tokens.success : tokens.danger,
+                            marginLeft: 6,
+                          }}
+                        >
+                          {qIsCorrect ? 'Correct Answer!' : `Incorrect · Option ${q.correctOptionId} is correct`}
+                        </Text>
+                      </View>
+                      <Text style={{ fontSize: 13, color: tokens.textPrimary, lineHeight: 18 }}>
+                        {q.explanationLatex || 'Detailed explanation provided for academic concept.'}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+
+            {/* Bottom Submit / Finish Button for Scroll View */}
+            <TouchableOpacity
+              onPress={() => {
+                onCompleteQuizChapter(activeChapter.id, selectedAnswers);
+                setStage('REVIEW');
+              }}
+              style={[
+                styles.primaryActionBtn,
+                {
+                  backgroundColor: isPractice ? tokens.primary : tokens.amber,
+                  marginTop: SPACING.md,
+                  marginBottom: SPACING.xl,
+                },
+              ]}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.primaryActionBtnText, { color: tokens.surface }]}>
+                {isPractice ? 'Finish Practice & View Review' : 'Submit Quiz'}
+              </Text>
+            </TouchableOpacity>
           </View>
         )}
-
-        {/* Bottom Next Button */}
-        <TouchableOpacity
-          onPress={() => {
-            if (questionIndex + 1 < questions.length) {
-              setQuestionIndex((i) => i + 1);
-            } else {
-              onCompleteQuizChapter(activeChapter.id, selectedAnswers);
-              setActiveChapter(null);
-              setQuestionIndex(0);
-            }
-          }}
-          style={[styles.primaryActionBtn, { backgroundColor: tokens.primary }]}
-        >
-          <Text style={[styles.primaryActionBtnText, { color: tokens.surface }]}>
-            {questionIndex + 1 < questions.length ? 'Next' : 'Finish Quiz'}
-          </Text>
-        </TouchableOpacity>
       </ScrollView>
     );
   }
@@ -518,9 +1119,7 @@ export function CourseTestsQuizFlowScreen({
               <TouchableOpacity
                 key={ch.id || `quiz-ch-${idx}`}
                 onPress={() => {
-                  setActiveChapter(ch);
-                  setQuestionIndex(0);
-                  setSelectedAnswers({});
+                  setPendingChapter(ch);
                 }}
                 activeOpacity={0.7}
                 style={[
@@ -569,6 +1168,184 @@ export function CourseTestsQuizFlowScreen({
           })
         )}
       </View>
+
+      {/* Quiz Mode Selection Modal (Practice Mode vs Exam Mode) */}
+      <Modal
+        visible={!!pendingChapter}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPendingChapter(null)}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            justifyContent: 'flex-end',
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: tokens.surface,
+              borderTopLeftRadius: RADIUS.xl,
+              borderTopRightRadius: RADIUS.xl,
+              padding: SPACING.lg,
+              paddingBottom: SPACING.xxl,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 18,
+                fontWeight: '800',
+                color: tokens.textPrimary,
+              }}
+            >
+              Choose Assessment Mode
+            </Text>
+            <Text
+              style={{
+                fontSize: 13,
+                color: tokens.textMuted,
+                marginTop: 4,
+                marginBottom: SPACING.lg,
+              }}
+            >
+              {pendingChapter?.title || 'Chapter Assessment'}
+            </Text>
+
+            {/* Practice Mode Option */}
+            <TouchableOpacity
+              onPress={() => {
+                const ch = pendingChapter!;
+                setQuizMode('PRACTICE');
+                setActiveChapter(ch);
+                setPendingChapter(null);
+                setStage('RUNNING');
+                setQuestionIndex(0);
+                setSelectedAnswers({});
+              }}
+              activeOpacity={0.8}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                padding: SPACING.md,
+                borderRadius: RADIUS.lg,
+                borderWidth: 1.5,
+                borderColor: tokens.primary,
+                backgroundColor: tokens.primarySoft,
+                marginBottom: SPACING.md,
+              }}
+            >
+              <View
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: RADIUS.md,
+                  backgroundColor: tokens.surface,
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                }}
+              >
+                <MasteraIcon name="book-open" size={22} color={tokens.primary} />
+              </View>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text
+                  style={{
+                    fontSize: 15,
+                    fontWeight: '700',
+                    color: tokens.primary,
+                  }}
+                >
+                  Practice Mode
+                </Text>
+                <Text
+                  style={{
+                    fontSize: 12,
+                    color: tokens.textMuted,
+                    marginTop: 2,
+                    lineHeight: 16,
+                  }}
+                >
+                  Immediate answer feedback & full explanations shown after each question.
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* Exam Mode Option */}
+            <TouchableOpacity
+              onPress={() => {
+                const ch = pendingChapter!;
+                setQuizMode('EXAM');
+                setActiveChapter(ch);
+                setPendingChapter(null);
+                setStage('RUNNING');
+                setQuestionIndex(0);
+                setSelectedAnswers({});
+              }}
+              activeOpacity={0.8}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                padding: SPACING.md,
+                borderRadius: RADIUS.lg,
+                borderWidth: 1.5,
+                borderColor: tokens.amber,
+                backgroundColor: tokens.amberSoft,
+                marginBottom: SPACING.lg,
+              }}
+            >
+              <View
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: RADIUS.md,
+                  backgroundColor: tokens.surface,
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                }}
+              >
+                <MasteraIcon name="award" size={22} color={tokens.amber} />
+              </View>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text
+                  style={{
+                    fontSize: 15,
+                    fontWeight: '700',
+                    color: tokens.amber,
+                  }}
+                >
+                  Exam Mode
+                </Text>
+                <Text
+                  style={{
+                    fontSize: 12,
+                    color: tokens.textMuted,
+                    marginTop: 2,
+                    lineHeight: 16,
+                  }}
+                >
+                  Timed simulation with answers hidden. Full score and answer review revealed upon submit.
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* Cancel Button */}
+            <TouchableOpacity
+              onPress={() => setPendingChapter(null)}
+              style={{
+                paddingVertical: 12,
+                borderRadius: RADIUS.md,
+                borderWidth: 1,
+                borderColor: tokens.border,
+                alignItems: 'center',
+              }}
+            >
+              <Text style={{ fontSize: 14, fontWeight: '600', color: tokens.textMuted }}>
+                Cancel
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -621,6 +1398,7 @@ export function CourseExamsDirectFlowScreen({
     new Set()
   );
   const [secondsRemaining, setSecondsRemaining] = useState<number>(40 * 60);
+  const [examNavMode, setExamNavMode] = useState<'PAGED' | 'SCROLL'>('PAGED');
 
   const tokens = STUDENT_THEMES[themeMode];
 
@@ -868,7 +1646,7 @@ export function CourseExamsDirectFlowScreen({
   }
 
   // ==========================================================================
-  // SCREEN 3: TIMED EXAM RUNNER (preview: "3 · Questions")
+  // SCREEN 3: TIMED EXAM RUNNER — Dual Navigation: PAGED or SCROLL
   // ==========================================================================
   if (stage === 'RUNNING' && runningExamSet) {
     const questions = getQuestionsForExamSet(runningExamSet);
@@ -893,11 +1671,7 @@ export function CourseExamsDirectFlowScreen({
                 { backgroundColor: tokens.surface, borderColor: tokens.border },
               ]}
             >
-              <MasteraIcon
-                name="chevron-left"
-                size={18}
-                color={tokens.textPrimary}
-              />
+              <MasteraIcon name="chevron-left" size={18} color={tokens.textPrimary} />
             </View>
             <Text style={[styles.backBtnText, { color: tokens.textPrimary }]}>
               {runningExamSet.title}
@@ -923,7 +1697,7 @@ export function CourseExamsDirectFlowScreen({
         style={[styles.container, { backgroundColor: tokens.background }]}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* Header: < AASTU · Mid | Timer Pill: 42:15 */}
+        {/* Header: < ExamSet Title | Nav Toggle | Timer */}
         <View style={styles.topNavRow}>
           <TouchableOpacity
             onPress={() => {
@@ -940,153 +1714,255 @@ export function CourseExamsDirectFlowScreen({
                 { backgroundColor: tokens.surface, borderColor: tokens.border },
               ]}
             >
-              <MasteraIcon
-                name="chevron-left"
-                size={18}
-                color={tokens.textPrimary}
-              />
+              <MasteraIcon name="chevron-left" size={18} color={tokens.textPrimary} />
             </View>
             <Text style={[styles.backBtnText, { color: tokens.textPrimary }]}>
               {runningExamSet.title}
             </Text>
           </TouchableOpacity>
 
-          {/* Yellow/Cream Timer Pill matching screenshot */}
+          {/* Nav Mode Toggle Pill: [ 📄 Pages | 📜 Scroll ] */}
+          <View
+            style={{
+              flexDirection: 'row',
+              backgroundColor: tokens.surface,
+              borderRadius: RADIUS.pill,
+              borderWidth: 1,
+              borderColor: tokens.border,
+              padding: 2,
+            }}
+          >
+            <TouchableOpacity
+              onPress={() => setExamNavMode('PAGED')}
+              style={{
+                paddingHorizontal: 7,
+                paddingVertical: 3,
+                borderRadius: RADIUS.pill,
+                backgroundColor: examNavMode === 'PAGED' ? tokens.amber : 'transparent',
+              }}
+            >
+              <Text style={{ fontSize: 10, fontWeight: '700', color: examNavMode === 'PAGED' ? tokens.white : tokens.textMuted }}>
+                📄 Pages
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setExamNavMode('SCROLL')}
+              style={{
+                paddingHorizontal: 7,
+                paddingVertical: 3,
+                borderRadius: RADIUS.pill,
+                backgroundColor: examNavMode === 'SCROLL' ? tokens.amber : 'transparent',
+              }}
+            >
+              <Text style={{ fontSize: 10, fontWeight: '700', color: examNavMode === 'SCROLL' ? tokens.white : tokens.textMuted }}>
+                📜 Scroll
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Timer Pill */}
           <View
             style={[
               styles.examBadgePill,
-              {
-                backgroundColor: tokens.amberSoft,
-                borderColor: tokens.border,
-              },
+              { backgroundColor: tokens.amberSoft, borderColor: tokens.border },
             ]}
           >
-            <Text
-              style={[
-                styles.examBadgePillText,
-                { color: tokens.amber, fontWeight: '700' },
-              ]}
-            >
+            <Text style={[styles.examBadgePillText, { color: tokens.amber, fontWeight: '700' }]}>
               {formattedTimer}
             </Text>
           </View>
         </View>
 
-        {/* Question Counter: Question 7 of 20 */}
-        <Text
-          style={[
-            styles.helperText,
-            { color: tokens.textMuted, marginVertical: SPACING.xs },
-          ]}
-        >
-          Question {questionIndex + 1} of {questions.length}
-        </Text>
-
-        {/* Question Prompt: Which word is a noun? */}
-        <Text
-          style={[
-            styles.questionPrompt,
-            { color: tokens.textPrimary, fontSize: 18, marginBottom: SPACING.md },
-          ]}
-        >
-          {currentQ?.promptLatex}
-        </Text>
-
-        {/* Options List */}
-        <View style={styles.optionsCol}>
-          {(currentQ?.options ?? []).map((opt) => {
-            const isSelected = chosenOptionId === opt.id;
-            return (
-              <TouchableOpacity
-                key={opt.id}
-                onPress={() =>
-                  setSelectedAnswers((prev) => ({
-                    ...prev,
-                    [currentQ.id]: opt.id,
-                  }))
-                }
-                activeOpacity={0.8}
+        {/* ------------------------------------------------------------------ */}
+        {/* VIEW A: PAGED EXAM RUNNER */}
+        {/* ------------------------------------------------------------------ */}
+        {examNavMode === 'PAGED' ? (
+          <View>
+            {/* Progress Bar */}
+            <View style={[styles.progressTrack, { backgroundColor: tokens.surface, borderColor: tokens.border, marginTop: SPACING.xs }]}>
+              <View
                 style={[
-                  styles.optionBtn,
+                  styles.progressFill,
                   {
+                    width: `${Math.round(((questionIndex + 1) / questions.length) * 100)}%`,
+                    backgroundColor: tokens.amber,
+                  },
+                ]}
+              />
+            </View>
+
+            <Text style={[styles.helperText, { color: tokens.textMuted, marginVertical: SPACING.xs }]}>
+              Question {questionIndex + 1} of {questions.length}
+            </Text>
+
+            <Text style={[styles.questionPrompt, { color: tokens.textPrimary, fontSize: 18, marginBottom: SPACING.md }]}>
+              {currentQ?.promptLatex}
+            </Text>
+
+            <View style={styles.optionsCol}>
+              {(currentQ?.options ?? []).map((opt) => {
+                const isSelected = chosenOptionId === opt.id;
+                return (
+                  <TouchableOpacity
+                    key={opt.id}
+                    onPress={() =>
+                      setSelectedAnswers((prev) => ({
+                        ...prev,
+                        [currentQ.id]: opt.id,
+                      }))
+                    }
+                    activeOpacity={0.8}
+                    style={[
+                      styles.optionBtn,
+                      {
+                        backgroundColor: isSelected ? tokens.amberSoft : tokens.surface,
+                        borderColor: isSelected ? tokens.amber : tokens.border,
+                        borderWidth: isSelected ? 2 : 1,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.optionText, { color: tokens.textPrimary, fontWeight: isSelected ? '700' : '500' }]}>
+                      {opt.id}. {opt.textLatex || (opt as any).text}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Previous / Next Row */}
+            <View style={[styles.prevNextRow, { marginVertical: SPACING.md }]}>
+              <TouchableOpacity
+                disabled={questionIndex === 0}
+                onPress={() => setQuestionIndex((i) => Math.max(0, i - 1))}
+                style={[
+                  styles.prevNextBtn,
+                  {
+                    borderColor: tokens.amber,
                     backgroundColor: tokens.surface,
-                    borderColor: isSelected ? tokens.amber : tokens.border,
-                    borderWidth: isSelected ? 2 : 1,
+                    opacity: questionIndex === 0 ? 0.4 : 1,
                   },
                 ]}
               >
-                <Text
-                  style={[
-                    styles.optionText,
-                    {
-                      color: tokens.textPrimary,
-                      fontWeight: isSelected ? '700' : '500',
-                    },
-                  ]}
-                >
-                  {opt.id} {opt.textLatex || (opt as any).text}
+                <Text style={[styles.prevNextBtnText, { color: tokens.amber }]}>
+                  Previous
                 </Text>
               </TouchableOpacity>
-            );
-          })}
-        </View>
 
-        {/* Previous and Next Navigation Buttons */}
-        <View style={[styles.prevNextRow, { marginVertical: SPACING.md }]}>
-          <TouchableOpacity
-            disabled={questionIndex === 0}
-            onPress={() => setQuestionIndex((i) => Math.max(0, i - 1))}
-            style={[
-              styles.prevNextBtn,
-              {
-                borderColor: tokens.primary,
-                backgroundColor: tokens.surface,
-                opacity: questionIndex === 0 ? 0.4 : 1,
-              },
-            ]}
-          >
-            <Text style={[styles.prevNextBtnText, { color: tokens.primary }]}>
-              Previous
-            </Text>
-          </TouchableOpacity>
+              <TouchableOpacity
+                disabled={questionIndex >= questions.length - 1}
+                onPress={() =>
+                  setQuestionIndex((i) => Math.min(questions.length - 1, i + 1))
+                }
+                style={[
+                  styles.prevNextBtn,
+                  {
+                    backgroundColor: tokens.amber,
+                    borderColor: tokens.amber,
+                    opacity: questionIndex >= questions.length - 1 ? 0.4 : 1,
+                  },
+                ]}
+              >
+                <Text style={[styles.prevNextBtnText, { color: tokens.white }]}>
+                  Next
+                </Text>
+              </TouchableOpacity>
+            </View>
 
-          <TouchableOpacity
-            disabled={questionIndex >= questions.length - 1}
-            onPress={() =>
-              setQuestionIndex((i) => Math.min(questions.length - 1, i + 1))
-            }
-            style={[
-              styles.prevNextBtn,
-              {
-                backgroundColor: tokens.primary,
-                borderColor: tokens.primary,
-                opacity: questionIndex >= questions.length - 1 ? 0.4 : 1,
-              },
-            ]}
-          >
-            <Text style={[styles.prevNextBtnText, { color: tokens.surface }]}>
-              Next
-            </Text>
-          </TouchableOpacity>
-        </View>
+            {/* Submit Exam Button */}
+            <TouchableOpacity
+              onPress={() => {
+                onSubmitExamAttempt(runningExamSet.id, selectedAnswers);
+                setExpandedQuestionIds(new Set(questions.map((q) => q.id)));
+                setStage('REVIEW');
+              }}
+              style={[
+                styles.primaryActionBtn,
+                { backgroundColor: tokens.amber, marginTop: SPACING.lg },
+              ]}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.primaryActionBtnText, { color: tokens.white }]}>
+                Submit Exam
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          /* ---------------------------------------------------------------- */
+          /* VIEW B: CONTINUOUS VERTICAL SCROLL EXAM RUNNER */
+          /* ---------------------------------------------------------------- */
+          <View style={{ gap: SPACING.lg, marginTop: SPACING.sm }}>
+            {questions.map((q, idx) => {
+              const qChosen = selectedAnswers[q.id];
+              return (
+                <View
+                  key={q.id}
+                  style={{
+                    backgroundColor: tokens.surface,
+                    borderWidth: 1,
+                    borderColor: tokens.border,
+                    borderRadius: RADIUS.lg,
+                    padding: SPACING.md,
+                  }}
+                >
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: tokens.textMuted, marginBottom: 4 }}>
+                    Question {idx + 1} of {questions.length}
+                  </Text>
+                  <Text style={[styles.questionPrompt, { color: tokens.textPrimary, fontSize: 16, marginBottom: SPACING.md }]}>
+                    {q.promptLatex}
+                  </Text>
 
-        {/* Sticky Solid Amber/Orange Submit exam button matching screenshot */}
-        <TouchableOpacity
-          onPress={() => {
-            onSubmitExamAttempt(runningExamSet.id, selectedAnswers);
-            setExpandedQuestionIds(new Set(questions.map((q) => q.id)));
-            setStage('REVIEW');
-          }}
-          style={[
-            styles.primaryActionBtn,
-            { backgroundColor: tokens.amber, marginTop: SPACING.lg },
-          ]}
-          activeOpacity={0.8}
-        >
-          <Text style={[styles.primaryActionBtnText, { color: tokens.white }]}>
-            Submit exam
-          </Text>
-        </TouchableOpacity>
+                  <View style={styles.optionsCol}>
+                    {(q.options ?? []).map((opt) => {
+                      const isSelected = qChosen === opt.id;
+                      return (
+                        <TouchableOpacity
+                          key={opt.id}
+                          onPress={() =>
+                            setSelectedAnswers((prev) => ({
+                              ...prev,
+                              [q.id]: opt.id,
+                            }))
+                          }
+                          activeOpacity={0.8}
+                          style={[
+                            styles.optionBtn,
+                            {
+                              backgroundColor: isSelected ? tokens.amberSoft : tokens.surface,
+                              borderColor: isSelected ? tokens.amber : tokens.border,
+                              borderWidth: isSelected ? 2 : 1,
+                            },
+                          ]}
+                        >
+                          <Text style={[styles.optionText, { color: tokens.textPrimary, fontWeight: isSelected ? '700' : '500' }]}>
+                            {opt.id}. {opt.textLatex || (opt as any).text}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              );
+            })}
+
+            {/* Submit Exam Button at bottom of scroll */}
+            <TouchableOpacity
+              onPress={() => {
+                onSubmitExamAttempt(runningExamSet.id, selectedAnswers);
+                setExpandedQuestionIds(new Set(questions.map((q) => q.id)));
+                setStage('REVIEW');
+              }}
+              style={[
+                styles.primaryActionBtn,
+                { backgroundColor: tokens.amber, marginTop: SPACING.md, marginBottom: SPACING.xl },
+              ]}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.primaryActionBtnText, { color: tokens.white }]}>
+                Submit Exam
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
     );
   }
@@ -1708,5 +2584,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
     marginBottom: SPACING.md,
+  },
+  bannerBox: {
+    // used for quiz/exam result banners
   },
 });

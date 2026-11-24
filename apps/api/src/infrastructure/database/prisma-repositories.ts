@@ -627,6 +627,50 @@ export class PrismaStudentAuthRepository implements StudentAuthRepositoryPort {
 
         const firstCourse = student.entitlements[0]?.course;
 
+        let hasFullBundle = student.entitlements.some(
+          (e) =>
+            (e.productType === 'FULL_COURSE_BUNDLE' ||
+              e.productType === 'BOTH_STREAMS_PACKAGE') &&
+            e.expiresAt.getTime() > now
+        );
+
+        if (!hasFullBundle) {
+          const approvedFullOrder = await this.prisma.order.findFirst({
+            where: {
+              studentId: student.id,
+              status: 'APPROVED',
+              expectedAmountETB: { gte: 350 },
+            },
+          });
+          if (approvedFullOrder) {
+            hasFullBundle = true;
+          }
+        }
+
+        let extraFullCourseIds: string[] = [];
+        if (hasFullBundle) {
+          const isSocial = (student.stream || '').toUpperCase() === 'SOCIAL';
+          const catalogCourses = await this.prisma.course.findMany({
+            where: { isActive: true, deletedAt: null },
+            select: { id: true, code: true, stream: true },
+          });
+          extraFullCourseIds = catalogCourses
+            .filter((c) => {
+              const s = (c.stream || '').toUpperCase();
+              return s === 'COMMON' || (isSocial ? s === 'SOCIAL' : s === 'NATURAL');
+            })
+            .flatMap((c) => [c.id, c.code]);
+        }
+
+        const activeCourseIds = Array.from(
+          new Set([
+            ...student.entitlements.map((e) => e.courseId),
+            ...student.entitlements.map((e) => e.course?.code).filter(Boolean) as string[],
+            ...student.entitlements.map((e) => e.course?.id).filter(Boolean) as string[],
+            ...extraFullCourseIds,
+          ])
+        );
+
         return {
           name: student.fullName,
           studentCode: student.studentCode,
@@ -636,9 +680,9 @@ export class PrismaStudentAuthRepository implements StudentAuthRepositoryPort {
           entitlement: {
             daysLeft,
             expiresAt: latestExpiry > 0 ? new Date(latestExpiry).toISOString() : null,
-            coursesCount: student.entitlements.length,
+            coursesCount: activeCourseIds.length,
           },
-          activeCourseIds: student.entitlements.map((e) => e.courseId),
+          activeCourseIds,
           perCourseProgress: {},
           continueLearningTarget: firstCourse
             ? {
@@ -1157,6 +1201,7 @@ export class PrismaOrdersRepository implements OrdersRepositoryPort {
   async updateOrder(orderId: string, patch: Partial<StoredOrderEntity>): Promise<StoredOrderEntity> {
     const data: any = {};
     if (patch.status) data.status = patch.status as any;
+    if (patch.orderType) data.orderType = patch.orderType as any;
     if (patch.rejectionReason !== undefined) data.rejectionReason = patch.rejectionReason;
     if (patch.reviewedByAdminId !== undefined) data.reviewedByAdminId = patch.reviewedByAdminId;
     if (patch.approvedAt !== undefined) data.approvedAt = patch.approvedAt ? new Date(patch.approvedAt) : null;
@@ -1288,6 +1333,27 @@ export class PrismaOrdersRepository implements OrdersRepositoryPort {
       startsAt: e.startsAt.toISOString(),
       expiresAt: e.expiresAt.toISOString(),
     }));
+  }
+
+  async findFreshmanPackageCourseIds(stream: string): Promise<string[]> {
+    const targetStream = (stream || 'NATURAL').toUpperCase();
+    const isSocial = targetStream === 'SOCIAL';
+    const courses = await this.prisma.course.findMany({
+      where: {
+        isActive: true,
+        deletedAt: null,
+      },
+      select: { id: true, stream: true },
+    });
+    return courses
+      .filter((c) => {
+        const s = (c.stream || '').toUpperCase();
+        if (s === 'COMMON') return true;
+        if (isSocial && s === 'SOCIAL') return true;
+        if (!isSocial && s === 'NATURAL') return true;
+        return false;
+      })
+      .map((c) => c.id);
   }
 
   private mapOrder(o: any): StoredOrderEntity {

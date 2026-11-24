@@ -108,7 +108,13 @@ export class OrdersPaymentsController {
     }
   ) {
     const actor = body?.actor || DEFAULT_SUPER_ADMIN;
-    const amount = body?.verifiedAmountETB ?? 1200;
+    let amount: number;
+    if (body?.verifiedAmountETB !== undefined) {
+      amount = body.verifiedAmountETB;
+    } else {
+      const order = await this.ordersService.getOrderById(orderId);
+      amount = order?.expectedAmountETB ?? 350;
+    }
     return this.ordersService.approveOrderReceipt(
       actor,
       orderId,
