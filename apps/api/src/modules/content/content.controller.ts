@@ -173,8 +173,7 @@ export class ContentAuthoringController {
     @Body() body?: { actor?: AuthenticatedAdminContext }
   ) {
     const actor = body?.actor || DEFAULT_SUPER_ADMIN;
-    await this.contentService.deleteChapter(actor, chapterId);
-    return { success: true, deletedChapterId: chapterId };
+    return this.contentService.deleteChapter(actor, chapterId);
   }
 
   @Post('chapters/:id/submit-for-review')

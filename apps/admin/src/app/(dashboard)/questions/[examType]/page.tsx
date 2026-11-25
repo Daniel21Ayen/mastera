@@ -126,8 +126,8 @@ export default function QuestionsExamTypePage({ params }: ExamTypeProps): React.
     try {
       setIsDeleting(true);
       await adminApiFetch(`/assessments/questions/${id}`, { method: 'DELETE' });
-      setDeleteConfirmQuestion(null);
       await loadQuestionBank();
+      setDeleteConfirmQuestion(null);
     } catch (err: any) {
       console.error('Failed to delete question:', err);
       alert(`Failed to delete question: ${err?.message || 'Server error'}`);

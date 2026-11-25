@@ -133,69 +133,14 @@ export default function ContentQuizTabPage({ params }: QuizTabProps): React.Reac
     try {
       setIsDeleting(true);
       await adminApiFetch(`/assessments/questions/${id}`, { method: 'DELETE' });
-      setDeleteConfirmQuestion(null);
       await loadQuestionBank();
+      setDeleteConfirmQuestion(null);
     } catch (err: any) {
       console.error('Failed to delete question:', err);
       alert(`Failed to delete question: ${err?.message || 'Server error'}`);
     } finally {
       setIsDeleting(false);
     }
-  };
-
-  const handleUploadCsv = async (
-    csvText: string,
-    targetChapterId?: string,
-    courseId?: string
-  ) => {
-    const base64Content = typeof window !== 'undefined'
-      ? btoa(unescape(encodeURIComponent(csvText)))
-      : Buffer.from(csvText, 'utf-8').toString('base64');
-
-    const normalizedCategory = currentTab.toUpperCase().replace('-', '_');
-
-    const res = await adminApiFetch<{ report: any }>('/questions/csv-dry-run', {
-      method: 'POST',
-      body: {
-        csvContentBase64: base64Content,
-        targetType: 'QUIZ_CHAPTER',
-        targetId: targetChapterId || null,
-        category: normalizedCategory,
-        courseId: courseId || (selectedCourseId !== 'ALL' ? selectedCourseId : null),
-        programId: selectedProgramId !== 'ALL' ? selectedProgramId : null,
-        semester: selectedSemester !== 'ALL' ? selectedSemester : null,
-      },
-    });
-
-    return res.report;
-  };
-
-  const handleCommitImport = async (
-    csvText: string,
-    targetChapterId?: string,
-    courseId?: string
-  ) => {
-    const base64Content = typeof window !== 'undefined'
-      ? btoa(unescape(encodeURIComponent(csvText)))
-      : Buffer.from(csvText, 'utf-8').toString('base64');
-
-    const normalizedCategory = currentTab.toUpperCase().replace('-', '_');
-
-    await adminApiFetch('/questions/csv-import', {
-      method: 'POST',
-      body: {
-        csvContentBase64: base64Content,
-        targetType: 'QUIZ_CHAPTER',
-        targetId: targetChapterId || null,
-        category: normalizedCategory,
-        courseId: courseId || (selectedCourseId !== 'ALL' ? selectedCourseId : null),
-        programId: selectedProgramId !== 'ALL' ? selectedProgramId : null,
-      },
-    });
-
-    setIsCsvModalOpen(false);
-    await loadQuestionBank();
-    alert('Successfully imported quiz questions into database question bank!');
   };
 
   const loadFilterMetadata = useCallback(async () => {
