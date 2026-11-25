@@ -721,7 +721,12 @@ export default function App(): any {
             allScopedCourses={departmentScopedCourses.map((c) => {
               const isIncluded =
                 selectedCourseIds.includes(c.id) ||
-                (hasActiveBundle && (selectedCourseIds.length === 0 || selectedCourseIds.includes(c.id)));
+                selectedCourseIds.includes(c.code) ||
+                (hasActiveBundle && (
+                  selectedCourseIds.length === 0 ||
+                  selectedCourseIds.includes(c.id) ||
+                  selectedCourseIds.includes(c.code)
+                ));
               return {
                 item: c,
                 canOpenNow: isIncluded || c.freeAccess,
@@ -833,7 +838,7 @@ export default function App(): any {
                   claimSecretHash,
                   deviceHardwareId: 'android-hw-' + localAccountId.replace(/-/g, '').slice(0, 12),
                   quoteId: 'quote-bundle-' + Date.now(),
-                  productType: 'SEMESTER_BUNDLE',
+                  productType: (payload as any).productType || 'SEMESTER_BUNDLE',
                   selectedCourseIds: payload.selectedCourseIds,
                   paymentMethodId: payload.paymentMethodId,
                   transactionReference: payload.transactionReference,

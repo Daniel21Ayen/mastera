@@ -324,7 +324,9 @@ export function PaymentsReviewManager({
 
               <span style={{ color: tokens.textMuted }}>Product</span>
               <span style={{ textAlign: 'right', fontWeight: 600 }}>
-                {selectedOrder.productType.replace(/_/g, ' ')}
+                {selectedOrder.productType === 'FULL_COURSE_BUNDLE' || (selectedOrder.expectedAmountETB >= 350 && selectedOrder.productType !== 'EXTRA_SINGLE_COURSE')
+                  ? 'FULL FRESHMAN PACKAGE'
+                  : selectedOrder.productType.replace(/_/g, ' ')}
               </span>
 
               <span style={{ color: tokens.textMuted }}>Courses selected</span>

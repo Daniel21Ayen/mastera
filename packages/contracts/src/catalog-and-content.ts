@@ -71,6 +71,7 @@ export interface CatalogChapterMetaDto {
   isFree: boolean;
   questionCount?: number;
   timeAllowedMinutes?: number | null; // DR-05, Q13: optional for quizzes
+  pdfStorageKey?: string | null;
   estimatedSizeBytes: number;
   version: number;
   status: ContentStatus;
