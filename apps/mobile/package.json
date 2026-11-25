@@ -13,8 +13,8 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "start": "expo start --port 8081",
-    "android": "expo start --android --port 8081",
+    "start": "expo start --port 8085",
+    "android": "expo start --android --port 8085",
     "build": "tsc -p tsconfig.json && (mkdir -p dist && cp -r src/assets dist/assets 2>/dev/null || true)",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --test dist/**/*.test.js"
