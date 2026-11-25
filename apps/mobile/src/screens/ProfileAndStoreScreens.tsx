@@ -7,7 +7,10 @@ import {
   ScrollView,
   StyleSheet,
   StatusBar,
+  Alert,
+  Image,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import {
   CatalogCourseDto,
   PaymentMethodEntryDto,
@@ -21,6 +24,15 @@ import {
   COURSE_ACCENTS,
 } from '@mastera/ui-tokens';
 import { MasteraIcon } from '../shared/components/MasteraIcon';
+import { getCandidateHosts } from '../core/data/live-catalog-provider';
+
+export interface PickedReceiptImage {
+  uri: string;
+  base64?: string | undefined;
+  fileName?: string | undefined;
+  fileSize?: number | undefined;
+  mimeType?: string | undefined;
+}
 
 const STATUS_BAR_HEIGHT = StatusBar.currentHeight ?? 24;
 
@@ -74,16 +86,23 @@ export interface ProfileAndStoreScreensProps {
   freshmanPackagePriceETB?: number;
   bundleDurationDays?: number;
   onOpenDownloadsManager: () => void;
+  onCheckApprovalStatus?: () => Promise<void> | void;
   onChangeUiLanguage: (lang: 'en' | 'am') => void;
   onReleaseDeviceAndLogout: () => void;
   onSubmitBundleOrder: (payload: {
     selectedCourseIds: string[];
     paymentMethodId: string;
     transactionReference: string;
-    fullName?: string;
-    phoneNumber?: string;
-    password?: string;
-  }) => void;
+    productType?: 'SEMESTER_BUNDLE' | 'FULL_COURSE_BUNDLE' | 'EXTRA_SINGLE_COURSE';
+    amountETB?: number;
+    fullName?: string | undefined;
+    phoneNumber?: string | undefined;
+    password?: string | undefined;
+    receiptBase64?: string | undefined;
+    receiptUri?: string | undefined;
+    receiptFileName?: string | undefined;
+    receiptMimeType?: string | undefined;
+  }) => Promise<{ success: boolean; orderId?: string; error?: string } | void> | void;
   themeMode?: ThemeMode;
   onToggleTheme?: () => void;
 }
@@ -110,6 +129,7 @@ export function ProfileAndStoreScreens({
   freshmanPackagePriceETB = 350,
   bundleDurationDays = 150,
   onOpenDownloadsManager,
+  onCheckApprovalStatus,
   onChangeUiLanguage,
   onReleaseDeviceAndLogout,
   onSubmitBundleOrder,
@@ -117,6 +137,7 @@ export function ProfileAndStoreScreens({
   onToggleTheme,
 }: ProfileAndStoreScreensProps): React.ReactElement {
   const [screen, setScreen] = useState<ProfileFlowScreen>(initialScreen);
+  const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
 
   React.useEffect(() => {
     if (initialScreen) {
@@ -124,14 +145,135 @@ export function ProfileAndStoreScreens({
     }
   }, [initialScreen]);
 
+  React.useEffect(() => {
+    if (
+      screen === 'ORDER_STATUS_PENDING' &&
+      (hasActiveBundle || (studentCode && studentCode !== 'LOCAL_ONLY'))
+    ) {
+      setScreen('ORDER_APPROVED_MS_ID');
+    }
+  }, [screen, hasActiveBundle, studentCode]);
+
   const [copiedMethodId, setCopiedMethodId] = useState<string | null>(null);
-  const [receiptAttached, setReceiptAttached] = useState<boolean>(true);
+  const [receiptAttached, setReceiptAttached] = useState<boolean>(false);
+  const [receiptImage, setReceiptImage] = useState<PickedReceiptImage | null>(null);
+  const [selectedProductType, setSelectedProductType] = useState<
+    'SEMESTER_BUNDLE' | 'FULL_COURSE_BUNDLE' | 'EXTRA_SINGLE_COURSE'
+  >('SEMESTER_BUNDLE');
+  const [checkoutAttempted, setCheckoutAttempted] = useState<boolean>(false);
+  const [accountSetupAttempted, setAccountSetupAttempted] = useState<boolean>(false);
   const [bundleCheckedIds, setBundleCheckedIds] = useState<Set<string>>(
     () => new Set(departmentCourses.slice(0, 7).map((c) => c.id))
   );
   const [selectedProviderId, setSelectedProviderId] = useState<string>(
     paymentMethods[0]?.id ?? 'pm-cbe-mobile'
   );
+
+  const handlePickReceipt = async (source: 'gallery' | 'camera') => {
+    try {
+      let result: ImagePicker.ImagePickerResult;
+      if (source === 'camera') {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert(
+            'Camera Permission Required',
+            'Mastera needs camera permission to capture your payment receipt screenshot.'
+          );
+          return;
+        }
+        result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ['images'],
+          allowsEditing: false,
+          quality: 0.85,
+          base64: true,
+        });
+      } else {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert(
+            'Photos Permission Required',
+            'Mastera needs access to your photos to attach your payment receipt screenshot.'
+          );
+          return;
+        }
+        result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images'],
+          allowsEditing: false,
+          quality: 0.85,
+          base64: true,
+        });
+      }
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        if (!asset) return;
+        let base64 = asset.base64 || '';
+        if (!base64 && asset.uri) {
+          try {
+            const res = await fetch(asset.uri);
+            const blob = await res.blob();
+            base64 = await new Promise<string>((resolve) => {
+              const reader = new FileReader();
+              reader.onloadend = () => {
+                const resStr = (reader.result as string) || '';
+                resolve(resStr.includes(',') ? resStr.split(',')[1] || '' : resStr);
+              };
+              reader.readAsDataURL(blob);
+            });
+          } catch {
+            // fallback
+          }
+        }
+        const rawName = asset.fileName || asset.uri.split('/').pop() || 'payment_receipt.jpg';
+        const cleanName = rawName.split('?')[0];
+        const picked: PickedReceiptImage = {
+          uri: asset.uri,
+          base64: base64 || undefined,
+          fileName: cleanName,
+          fileSize: asset.fileSize || 1024 * 180,
+          mimeType: asset.mimeType || 'image/jpeg',
+        };
+        setReceiptImage(picked);
+        setReceiptAttached(true);
+      }
+    } catch (err: any) {
+      console.error('Failed to pick receipt screenshot:', err);
+      Alert.alert('Error picking image', err?.message || 'Could not access image on device.');
+    }
+  };
+
+  const handleAttachReceiptPress = () => {
+    Alert.alert(
+      'Attach Payment Screenshot',
+      'Choose how you want to upload your bank or mobile payment receipt screenshot:',
+      [
+        {
+          text: 'Choose from Gallery',
+          onPress: () => handlePickReceipt('gallery'),
+        },
+        {
+          text: 'Take Photo with Camera',
+          onPress: () => handlePickReceipt('camera'),
+        },
+        ...(receiptImage
+          ? [
+              {
+                text: 'Remove Screenshot',
+                style: 'destructive' as const,
+                onPress: () => {
+                  setReceiptImage(null);
+                  setReceiptAttached(false);
+                },
+              },
+            ]
+          : []),
+        {
+          text: 'Cancel',
+          style: 'cancel' as const,
+        },
+      ]
+    );
+  };
 
   // Keep selected provider aligned with available payment methods
   useEffect(() => {
@@ -143,13 +285,13 @@ export function ProfileAndStoreScreens({
     }
   }, [paymentMethods, selectedProviderId]);
 
-  const [txRef, setTxRef] = useState('FT26302MAC789');
+  const [txRef, setTxRef] = useState<string>('');
 
   // Account Setup Form state (Offline registration pre-submit)
-  const [setupFullName, setSetupFullName] = useState(fullName);
-  const [setupPhone, setSetupPhone] = useState(identifier);
+  const [setupFullName, setSetupFullName] = useState(fullName || '');
+  const [setupPhone, setSetupPhone] = useState(identifier || '');
   const [setupPassword, setSetupPassword] = useState('');
-  const [setupEmail, setSetupEmail] = useState(email);
+  const [setupEmail, setSetupEmail] = useState(email || '');
 
   // University & Program switcher local state
   const [tempUniversity, setTempUniversity] = useState(academicScope.universityName);
@@ -169,6 +311,44 @@ export function ProfileAndStoreScreens({
   const [feedbackMessage, setFeedbackMessage] = useState<string>('');
   const [feedbackContact, setFeedbackContact] = useState<string>('');
   const [feedbackSubmitted, setFeedbackSubmitted] = useState<boolean>(false);
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState<boolean>(false);
+
+  const handleSubmitFeedback = async () => {
+    if (!feedbackMessage.trim()) return;
+    setFeedbackSubmitting(true);
+    try {
+      const candidateHosts = getCandidateHosts();
+      for (const host of candidateHosts) {
+        try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 2000);
+          const res = await fetch(`${host}/support/tickets`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              studentName: fullName || 'Mobile Student',
+              studentCode: studentCode || 'MS-MOBILE',
+              phone: feedbackContact || identifier || '+251 900 000 000',
+              universityAndProgram: `${academicScope.universityName} • ${academicScope.programName}`,
+              categoryLabel: feedbackCategory,
+              subject: `Mobile Feedback: ${feedbackCategory} (${feedbackRating}/5 stars)`,
+              messageBody: feedbackMessage,
+            }),
+            signal: controller.signal,
+          });
+          clearTimeout(timer);
+          if (res.ok) {
+            break;
+          }
+        } catch {
+          // Continue to next host fallback
+        }
+      }
+    } finally {
+      setFeedbackSubmitting(false);
+      setFeedbackSubmitted(true);
+    }
+  };
 
   const tokens = STUDENT_THEMES[themeMode];
 
@@ -1187,24 +1367,20 @@ export function ProfileAndStoreScreens({
 
             {/* Submit button */}
             <TouchableOpacity
-              onPress={() => {
-                if (feedbackMessage.trim()) {
-                  setFeedbackSubmitted(true);
-                }
-              }}
-              disabled={!feedbackMessage.trim()}
+              onPress={handleSubmitFeedback}
+              disabled={!feedbackMessage.trim() || feedbackSubmitting}
               style={[
                 styles.primaryBtn,
                 {
                   backgroundColor: tokens.primary,
-                  opacity: feedbackMessage.trim() ? 1 : 0.6,
+                  opacity: feedbackMessage.trim() && !feedbackSubmitting ? 1 : 0.6,
                   marginTop: SPACING.xs,
                   marginBottom: SPACING.xl,
                 },
               ]}
             >
               <Text style={[styles.primaryBtnText, { color: tokens.surface }]}>
-                Submit Feedback
+                {feedbackSubmitting ? 'Submitting Ticket...' : 'Submit Feedback'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -1439,7 +1615,10 @@ export function ProfileAndStoreScreens({
 
         <View style={styles.listCol}>
           <TouchableOpacity
-            onPress={() => setScreen('BUNDLE_BUILDER')}
+            onPress={() => {
+              setSelectedProductType('SEMESTER_BUNDLE');
+              setScreen('BUNDLE_BUILDER');
+            }}
             style={[
               styles.storeCard,
               { backgroundColor: tokens.surface, borderColor: tokens.primary },
@@ -1459,7 +1638,10 @@ export function ProfileAndStoreScreens({
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => setScreen('PAYMENT_CHECKOUT')}
+            onPress={() => {
+              setSelectedProductType('FULL_COURSE_BUNDLE');
+              setScreen('PAYMENT_CHECKOUT');
+            }}
             style={[
               styles.storeCard,
               { backgroundColor: tokens.surface, borderColor: tokens.border },
@@ -1470,7 +1652,7 @@ export function ProfileAndStoreScreens({
                 Full Freshman Package
               </Text>
               <Text style={[styles.storeCardSub, { color: tokens.textMuted }]}>
-                All courses of the stream
+                All courses of your stream + Common
               </Text>
             </View>
             <Text style={[styles.priceTag, { color: tokens.primary }]}>
@@ -1479,34 +1661,96 @@ export function ProfileAndStoreScreens({
           </TouchableOpacity>
 
           <TouchableOpacity
+            onPress={() => {
+              if (!hasActiveBundle) {
+                Alert.alert(
+                  'Bundle Required',
+                  'Single courses can only be purchased after purchasing a semester bundle or full freshman package (SRS Section 3.4 & 6.5).'
+                );
+                return;
+              }
+              setSelectedProductType('EXTRA_SINGLE_COURSE');
+              setScreen('BUNDLE_BUILDER');
+            }}
             style={[
               styles.storeCard,
-              { backgroundColor: tokens.surface, borderColor: tokens.border },
+              {
+                backgroundColor: tokens.surface,
+                borderColor: tokens.border,
+                opacity: hasActiveBundle ? 1 : 0.65,
+              },
             ]}
           >
             <View>
-              <Text style={[styles.storeCardTitle, { color: tokens.textPrimary }]}>
-                Single course
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={[styles.storeCardTitle, { color: tokens.textPrimary }]}>
+                  Single course
+                </Text>
+                {!hasActiveBundle && (
+                  <View
+                    style={{
+                      backgroundColor: tokens.border,
+                      paddingHorizontal: 6,
+                      paddingVertical: 2,
+                      borderRadius: 4,
+                    }}
+                  >
+                    <Text style={{ fontSize: 10, color: tokens.textMuted, fontWeight: '700' }}>
+                      LOCKED
+                    </Text>
+                  </View>
+                )}
+              </View>
               <Text style={[styles.storeCardSub, { color: tokens.textMuted }]}>
-                Buy one course first
+                {hasActiveBundle ? 'Add one course (60 ETB)' : 'Buy semester bundle or full package first'}
               </Text>
             </View>
             <MasteraIcon name="chevron-right" size={18} color={tokens.textMuted} />
           </TouchableOpacity>
 
           <TouchableOpacity
+            onPress={() => {
+              if (!hasActiveBundle) {
+                Alert.alert(
+                  'Bundle Required',
+                  'Single courses can only be purchased after purchasing a semester bundle or full freshman package (SRS Section 3.4 & 6.5).'
+                );
+                return;
+              }
+              setSelectedProductType('EXTRA_SINGLE_COURSE');
+              setScreen('BUNDLE_BUILDER');
+            }}
             style={[
               styles.storeCard,
-              { backgroundColor: tokens.surface, borderColor: tokens.border },
+              {
+                backgroundColor: tokens.surface,
+                borderColor: tokens.border,
+                opacity: hasActiveBundle ? 1 : 0.65,
+              },
             ]}
           >
             <View>
-              <Text style={[styles.storeCardTitle, { color: tokens.textPrimary }]}>
-                Extra course
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={[styles.storeCardTitle, { color: tokens.textPrimary }]}>
+                  Extra course
+                </Text>
+                {!hasActiveBundle && (
+                  <View
+                    style={{
+                      backgroundColor: tokens.border,
+                      paddingHorizontal: 6,
+                      paddingVertical: 2,
+                      borderRadius: 4,
+                    }}
+                  >
+                    <Text style={{ fontSize: 10, color: tokens.textMuted, fontWeight: '700' }}>
+                      LOCKED
+                    </Text>
+                  </View>
+                )}
+              </View>
               <Text style={[styles.storeCardSub, { color: tokens.textMuted }]}>
-                Add beyond the bundle
+                {hasActiveBundle ? 'Add beyond the bundle' : 'Buy semester bundle or full package first'}
               </Text>
             </View>
             <MasteraIcon name="chevron-right" size={18} color={tokens.textMuted} />
@@ -1628,13 +1872,40 @@ export function ProfileAndStoreScreens({
       paymentMethods.find((p) => p.id === selectedProviderId) ??
       paymentMethods[0];
 
+    const checkoutAmountETB =
+      selectedProductType === 'FULL_COURSE_BUNDLE'
+        ? freshmanPackagePriceETB
+        : selectedProductType === 'EXTRA_SINGLE_COURSE'
+        ? 60
+        : bundlePriceETB;
+
+    const checkoutDurationDays =
+      selectedProductType === 'FULL_COURSE_BUNDLE'
+        ? 300
+        : selectedProductType === 'EXTRA_SINGLE_COURSE'
+        ? 90
+        : bundleDurationDays;
+
+    const checkoutTitle =
+      selectedProductType === 'FULL_COURSE_BUNDLE'
+        ? 'Full Freshman Package'
+        : selectedProductType === 'EXTRA_SINGLE_COURSE'
+        ? 'Single Course'
+        : 'Semester Bundle';
+
     return (
       <ScrollView
         style={[styles.container, { backgroundColor: tokens.background }]}
         contentContainerStyle={styles.scrollContent}
       >
         <View style={styles.headerBackRow}>
-          {renderBackArrow(() => setScreen('BUNDLE_BUILDER'))}
+          {renderBackArrow(() =>
+            setScreen(
+              selectedProductType === 'SEMESTER_BUNDLE'
+                ? 'BUNDLE_BUILDER'
+                : 'STORE_CATALOG'
+            )
+          )}
           <Text style={[styles.screenTitleWithBack, { color: tokens.textPrimary }]}>
             Payment
           </Text>
@@ -1642,10 +1913,10 @@ export function ProfileAndStoreScreens({
 
         <View style={styles.paymentSummaryBox}>
           <Text style={[styles.paymentAmountTitle, { color: tokens.textPrimary }]}>
-            Send exactly {bundlePriceETB} ETB
+            Send exactly {checkoutAmountETB} ETB
           </Text>
           <Text style={[styles.paymentDurationSub, { color: tokens.primary }]}>
-            {bundleDurationDays} days access after approval
+            {checkoutTitle} · {checkoutDurationDays} days access after approval
           </Text>
         </View>
 
@@ -1832,47 +2103,86 @@ export function ProfileAndStoreScreens({
         </View>
 
         {/* Attach Payment Screenshot */}
-        <Text
-          style={[
-            styles.inputSectionHeader,
-            { color: tokens.textMuted, marginTop: SPACING.sm, marginBottom: 8 },
-          ]}
+        <View
+          style={{
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginTop: SPACING.sm,
+            marginBottom: 8,
+          }}
         >
-          ATTACH PAYMENT SCREENSHOT
-        </Text>
+          <Text style={[styles.inputSectionHeader, { color: tokens.textMuted, margin: 0 }]}>
+            ATTACH PAYMENT SCREENSHOT
+          </Text>
+          <Text
+            style={{
+              fontSize: 11,
+              fontWeight: '700',
+              color: receiptAttached ? tokens.success : tokens.danger,
+            }}
+          >
+            {receiptAttached ? '✓ Attached' : '* Required'}
+          </Text>
+        </View>
+
         <TouchableOpacity
-          onPress={() => setReceiptAttached((prev) => !prev)}
+          onPress={handleAttachReceiptPress}
           style={[
             styles.receiptBox,
             {
               backgroundColor: tokens.surface,
-              borderColor: receiptAttached ? tokens.primary : tokens.border,
-              padding: 14,
+              borderColor:
+                checkoutAttempted && !receiptAttached
+                  ? tokens.danger
+                  : receiptAttached
+                  ? tokens.success
+                  : tokens.border,
+              borderWidth: checkoutAttempted && !receiptAttached ? 1.5 : 1,
+              padding: 12,
             },
           ]}
           activeOpacity={0.8}
         >
-          <MasteraIcon
-            name={receiptAttached ? 'check-circle' : 'award'}
-            size={22}
-            color={receiptAttached ? tokens.success : tokens.textMuted}
-          />
+          {receiptImage ? (
+            <Image
+              source={{ uri: receiptImage.uri }}
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: 8,
+                backgroundColor: tokens.border,
+              }}
+              resizeMode="cover"
+            />
+          ) : (
+            <MasteraIcon
+              name={checkoutAttempted ? 'x-circle' : 'award'}
+              size={22}
+              color={checkoutAttempted ? tokens.danger : tokens.textMuted}
+            />
+          )}
           <View style={{ marginLeft: 10, flex: 1 }}>
             <Text
               style={{
                 fontSize: 14,
                 fontWeight: '700',
-                color: receiptAttached ? tokens.textPrimary : tokens.textMuted,
+                color: receiptAttached
+                  ? tokens.textPrimary
+                  : checkoutAttempted && !receiptAttached
+                  ? tokens.danger
+                  : tokens.textPrimary,
               }}
+              numberOfLines={1}
             >
-              {receiptAttached
-                ? 'payment_receipt_screenshot.png'
-                : 'Tap to attach payment screenshot'}
+              {receiptImage
+                ? receiptImage.fileName || 'receipt_screenshot.jpg'
+                : 'Tap to pick image from your phone'}
             </Text>
             <Text style={{ fontSize: 11, color: tokens.textMuted, marginTop: 2 }}>
-              {receiptAttached
-                ? '214 KB · Valid screenshot'
-                : 'Supports JPEG, PNG or WebP (max 300 KB)'}
+              {receiptImage
+                ? `${Math.round((receiptImage.fileSize || 1024) / 1024)} KB · Screenshot ready to send`
+                : 'Supports Photo Gallery & Camera (JPEG, PNG, WebP)'}
             </Text>
           </View>
           <View
@@ -1890,36 +2200,110 @@ export function ProfileAndStoreScreens({
                 color: receiptAttached ? tokens.success : tokens.primary,
               }}
             >
-              {receiptAttached ? 'Attached' : '+ Attach'}
+              {receiptAttached ? 'Change' : '+ Pick Photo'}
             </Text>
           </View>
         </TouchableOpacity>
 
+        {checkoutAttempted && !receiptAttached && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6, gap: 6 }}>
+            <MasteraIcon name="x-circle" size={14} color={tokens.danger} />
+            <Text style={{ fontSize: 12, color: tokens.danger, fontWeight: '600' }}>
+              Payment screenshot image is required before proceeding. Tap above to attach proof.
+            </Text>
+          </View>
+        )}
+
         {/* Transaction Reference Input */}
         <View style={[styles.fieldGroup, { marginTop: SPACING.md }]}>
-          <Text style={[styles.fieldLabel, { color: tokens.textMuted }]}>
-            TRANSACTION REFERENCE
-          </Text>
+          <View
+            style={{
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: 4,
+            }}
+          >
+            <Text style={[styles.fieldLabel, { color: tokens.textMuted, margin: 0 }]}>
+              TRANSACTION REFERENCE
+            </Text>
+            <Text
+              style={{
+                fontSize: 11,
+                fontWeight: '700',
+                color: txRef.trim().length >= 4 ? tokens.success : tokens.danger,
+              }}
+            >
+              {txRef.trim().length >= 4 ? '✓ Valid' : '* Required'}
+            </Text>
+          </View>
           <TextInput
             value={txRef}
             onChangeText={setTxRef}
-            placeholder="e.g. FT26302MAC789"
+            placeholder="e.g. FT26302MAC789 or Telebirr ref"
             placeholderTextColor={tokens.textMuted}
             style={[
               styles.textInput,
               {
                 backgroundColor: tokens.surface,
-                borderColor: tokens.border,
+                borderColor:
+                  checkoutAttempted && txRef.trim().length < 4
+                    ? tokens.danger
+                    : tokens.border,
+                borderWidth: checkoutAttempted && txRef.trim().length < 4 ? 1.5 : 1,
                 color: tokens.textPrimary,
               },
             ]}
           />
+          {checkoutAttempted && txRef.trim().length < 4 && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6, gap: 6 }}>
+              <MasteraIcon name="x-circle" size={14} color={tokens.danger} />
+              <Text style={{ fontSize: 12, color: tokens.danger, fontWeight: '600' }}>
+                Please enter your payment transaction reference (at least 4 characters).
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Continue to Account Setup Form (User Correction Step) */}
         <TouchableOpacity
-          onPress={() => setScreen('ACCOUNT_SETUP')}
-          style={[styles.primaryBtn, { backgroundColor: tokens.primary, marginTop: SPACING.md }]}
+          onPress={() => {
+            setCheckoutAttempted(true);
+            if (!receiptAttached) {
+              Alert.alert(
+                'Payment Screenshot Required',
+                'Please attach a screenshot of your bank or mobile payment receipt before proceeding to the next step.'
+              );
+              return;
+            }
+            if (txRef.trim().length < 4) {
+              Alert.alert(
+                'Transaction Reference Required',
+                'Please enter your bank or mobile payment transaction reference before proceeding.'
+              );
+              return;
+            }
+            if (!selectedProviderId) {
+              Alert.alert(
+                'Payment Method Required',
+                'Please select a payment method before proceeding.'
+              );
+              return;
+            }
+            setScreen('ACCOUNT_SETUP');
+          }}
+          style={[
+            styles.primaryBtn,
+            {
+              backgroundColor: tokens.primary,
+              opacity:
+                receiptAttached && txRef.trim().length >= 4 && selectedProviderId
+                  ? 1
+                  : 0.65,
+              marginTop: SPACING.md,
+            },
+          ]}
+          activeOpacity={0.8}
         >
           <Text style={[styles.primaryBtnText, { color: tokens.surface }]}>
             Continue to Account Setup →
@@ -1951,21 +2335,78 @@ export function ProfileAndStoreScreens({
         </Text>
 
         <View style={styles.fieldGroup}>
-          <Text style={[styles.fieldLabel, { color: tokens.textMuted }]}>FULL NAME</Text>
+          <View
+            style={{
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: 4,
+            }}
+          >
+            <Text style={[styles.fieldLabel, { color: tokens.textMuted, margin: 0 }]}>
+              FULL NAME
+            </Text>
+            <Text
+              style={{
+                fontSize: 11,
+                fontWeight: '700',
+                color: setupFullName.trim().length >= 2 ? tokens.success : tokens.danger,
+              }}
+            >
+              {setupFullName.trim().length >= 2 ? '✓ Valid' : '* Required'}
+            </Text>
+          </View>
           <TextInput
             value={setupFullName}
             onChangeText={setSetupFullName}
-            placeholder="e.g. Full Name"
+            placeholder="e.g. Abebe Bikila"
             placeholderTextColor={tokens.textMuted}
             style={[
               styles.textInput,
-              { backgroundColor: tokens.surface, borderColor: tokens.border, color: tokens.textPrimary },
+              {
+                backgroundColor: tokens.surface,
+                borderColor:
+                  accountSetupAttempted && setupFullName.trim().length < 2
+                    ? tokens.danger
+                    : tokens.border,
+                borderWidth:
+                  accountSetupAttempted && setupFullName.trim().length < 2 ? 1.5 : 1,
+                color: tokens.textPrimary,
+              },
             ]}
           />
+          {accountSetupAttempted && setupFullName.trim().length < 2 && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 4 }}>
+              <MasteraIcon name="x-circle" size={13} color={tokens.danger} />
+              <Text style={{ fontSize: 12, color: tokens.danger, fontWeight: '600' }}>
+                Full name is required before submitting.
+              </Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.fieldGroup}>
-          <Text style={[styles.fieldLabel, { color: tokens.textMuted }]}>PHONE NUMBER</Text>
+          <View
+            style={{
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: 4,
+            }}
+          >
+            <Text style={[styles.fieldLabel, { color: tokens.textMuted, margin: 0 }]}>
+              PHONE NUMBER
+            </Text>
+            <Text
+              style={{
+                fontSize: 11,
+                fontWeight: '700',
+                color: setupPhone.trim().length >= 9 ? tokens.success : tokens.danger,
+              }}
+            >
+              {setupPhone.trim().length >= 9 ? '✓ Valid' : '* Required'}
+            </Text>
+          </View>
           <TextInput
             value={setupPhone}
             onChangeText={setSetupPhone}
@@ -1974,24 +2415,78 @@ export function ProfileAndStoreScreens({
             keyboardType="phone-pad"
             style={[
               styles.textInput,
-              { backgroundColor: tokens.surface, borderColor: tokens.border, color: tokens.textPrimary },
+              {
+                backgroundColor: tokens.surface,
+                borderColor:
+                  accountSetupAttempted && setupPhone.trim().length < 9
+                    ? tokens.danger
+                    : tokens.border,
+                borderWidth:
+                  accountSetupAttempted && setupPhone.trim().length < 9 ? 1.5 : 1,
+                color: tokens.textPrimary,
+              },
             ]}
           />
+          {accountSetupAttempted && setupPhone.trim().length < 9 && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 4 }}>
+              <MasteraIcon name="x-circle" size={13} color={tokens.danger} />
+              <Text style={{ fontSize: 12, color: tokens.danger, fontWeight: '600' }}>
+                Valid phone number is required (at least 9 digits).
+              </Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.fieldGroup}>
-          <Text style={[styles.fieldLabel, { color: tokens.textMuted }]}>PASSWORD</Text>
+          <View
+            style={{
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: 4,
+            }}
+          >
+            <Text style={[styles.fieldLabel, { color: tokens.textMuted, margin: 0 }]}>
+              PASSWORD
+            </Text>
+            <Text
+              style={{
+                fontSize: 11,
+                fontWeight: '700',
+                color: setupPassword.trim().length >= 4 ? tokens.success : tokens.danger,
+              }}
+            >
+              {setupPassword.trim().length >= 4 ? '✓ Valid' : '* Required'}
+            </Text>
+          </View>
           <TextInput
             value={setupPassword}
             onChangeText={setSetupPassword}
-            placeholder="Enter secure password"
+            placeholder="Enter secure password (min 4 characters)"
             placeholderTextColor={tokens.textMuted}
             secureTextEntry
             style={[
               styles.textInput,
-              { backgroundColor: tokens.surface, borderColor: tokens.border, color: tokens.textPrimary },
+              {
+                backgroundColor: tokens.surface,
+                borderColor:
+                  accountSetupAttempted && setupPassword.trim().length < 4
+                    ? tokens.danger
+                    : tokens.border,
+                borderWidth:
+                  accountSetupAttempted && setupPassword.trim().length < 4 ? 1.5 : 1,
+                color: tokens.textPrimary,
+              },
             ]}
           />
+          {accountSetupAttempted && setupPassword.trim().length < 4 && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 4 }}>
+              <MasteraIcon name="x-circle" size={13} color={tokens.danger} />
+              <Text style={{ fontSize: 12, color: tokens.danger, fontWeight: '600' }}>
+                Password is required (at least 4 characters).
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Offline Privacy Guarantee Card */}
@@ -2013,21 +2508,91 @@ export function ProfileAndStoreScreens({
         </View>
 
         <TouchableOpacity
-          onPress={() => {
-            onSubmitBundleOrder({
-              selectedCourseIds: Array.from(bundleCheckedIds),
-              paymentMethodId: selectedProviderId,
-              transactionReference: txRef,
-              fullName: setupFullName,
-              phoneNumber: setupPhone,
-              password: setupPassword,
-            });
-            setScreen('ORDER_STATUS_PENDING');
+          onPress={async () => {
+            setAccountSetupAttempted(true);
+            if (setupFullName.trim().length < 2) {
+              Alert.alert('Full Name Required', 'Please enter your full name before submitting.');
+              return;
+            }
+            if (setupPhone.trim().length < 9) {
+              Alert.alert(
+                'Phone Number Required',
+                'Please enter a valid phone number (at least 9 digits) before submitting.'
+              );
+              return;
+            }
+            if (setupPassword.trim().length < 4) {
+              Alert.alert(
+                'Password Required',
+                'Please choose a secure password (at least 4 characters) before submitting.'
+              );
+              return;
+            }
+
+            try {
+              setIsSubmittingOrder(true);
+              const checkoutAmountETB =
+                selectedProductType === 'FULL_COURSE_BUNDLE'
+                  ? freshmanPackagePriceETB
+                  : selectedProductType === 'EXTRA_SINGLE_COURSE'
+                  ? 60
+                  : bundlePriceETB;
+
+              const courseIdsToSubmit =
+                selectedProductType === 'FULL_COURSE_BUNDLE'
+                  ? departmentCourses.map((c) => c.id)
+                  : selectedProductType === 'EXTRA_SINGLE_COURSE'
+                  ? Array.from(bundleCheckedIds).slice(0, 1)
+                  : Array.from(bundleCheckedIds);
+
+              const result = await onSubmitBundleOrder({
+                selectedCourseIds: courseIdsToSubmit,
+                productType: selectedProductType,
+                amountETB: checkoutAmountETB,
+                paymentMethodId: selectedProviderId,
+                transactionReference: txRef.trim(),
+                fullName: setupFullName.trim(),
+                phoneNumber: setupPhone.trim(),
+                password: setupPassword.trim(),
+                receiptBase64: receiptImage?.base64 || '',
+                receiptUri: receiptImage?.uri,
+                receiptFileName: receiptImage?.fileName,
+                receiptMimeType: receiptImage?.mimeType,
+              });
+
+              if (result && !result.success) {
+                Alert.alert(
+                  'Submission Failed',
+                  result.error || 'Server rejected the order. Please check network connection and retry.'
+                );
+              } else {
+                setScreen('ORDER_STATUS_PENDING');
+              }
+            } catch (err: any) {
+              Alert.alert('Submission Error', err?.message || 'An error occurred during submission.');
+            } finally {
+              setIsSubmittingOrder(false);
+            }
           }}
-          style={[styles.primaryBtn, { backgroundColor: tokens.primary, marginTop: SPACING.lg }]}
+          disabled={isSubmittingOrder}
+          style={[
+            styles.primaryBtn,
+            {
+              backgroundColor: tokens.primary,
+              opacity:
+                isSubmittingOrder ||
+                setupFullName.trim().length < 2 ||
+                setupPhone.trim().length < 9 ||
+                setupPassword.trim().length < 4
+                  ? 0.65
+                  : 1,
+              marginTop: SPACING.lg,
+            },
+          ]}
+          activeOpacity={0.8}
         >
           <Text style={[styles.primaryBtnText, { color: tokens.surface }]}>
-            Submit for review
+            {isSubmittingOrder ? 'Submitting order...' : 'Submit for review'}
           </Text>
         </TouchableOpacity>
       </ScrollView>
@@ -2120,11 +2685,15 @@ export function ProfileAndStoreScreens({
         </View>
 
         <TouchableOpacity
-          onPress={() => setScreen('ORDER_APPROVED_MS_ID')}
+          onPress={async () => {
+            if (onCheckApprovalStatus) {
+              await onCheckApprovalStatus();
+            }
+          }}
           style={[styles.outlineBtn, { borderColor: tokens.primary, marginTop: SPACING.md }]}
         >
           <Text style={[styles.outlineBtnText, { color: tokens.primary }]}>
-            Simulate Admin Approval (Demo)
+            Check Approval Status
           </Text>
         </TouchableOpacity>
 

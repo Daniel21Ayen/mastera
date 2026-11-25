@@ -7,7 +7,10 @@ import {
   Param,
   Post,
   Query,
+  Res,
 } from '@nestjs/common';
+import * as fs from 'fs';
+import * as path from 'path';
 import { OrdersPaymentsService } from './orders-payments.service';
 import { AuthenticatedAdminContext } from '../permissions/scope.service';
 import { ClaimOrderDto, SubmitOrderWithLocalDto } from '@mastera/contracts';
@@ -29,6 +32,31 @@ export class OrdersPaymentsController {
     return this.ordersService.listOrders(status);
   }
 
+  @Get(':id/receipt')
+  async getOrderReceipt(@Param('id') orderId: string, @Res() res: any) {
+    const receiptsDir = path.join(process.cwd(), 'data', 'receipts');
+    const filePath = path.join(receiptsDir, `${orderId}.img`);
+    if (fs.existsSync(filePath)) {
+      const buf = fs.readFileSync(filePath);
+      let contentType = 'image/jpeg';
+      if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) {
+        contentType = 'image/png';
+      } else if (buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46) {
+        contentType = 'image/webp';
+      }
+      res.setHeader('Content-Type', contentType);
+      return res.send(buf);
+    }
+    res.setHeader('Content-Type', 'image/svg+xml');
+    return res.send(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">
+        <rect width="100%" height="100%" fill="#f1f5f9"/>
+        <text x="50%" y="45%" text-anchor="middle" font-family="sans-serif" font-size="16" fill="#64748b">Payment Proof Screenshot</text>
+        <text x="50%" y="55%" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#94a3b8">Order ID: ${orderId}</text>
+      </svg>`
+    );
+  }
+
   @Get(':id')
   async getOrderById(@Param('id') orderId: string) {
     return this.ordersService.getOrderById(orderId);
@@ -44,12 +72,29 @@ export class OrdersPaymentsController {
       authenticatedStudentId?: string;
     }
   ) {
-    const receiptBuffer = Buffer.from(body.receiptImageBase64, 'base64');
-    return this.ordersService.submitOrderWithReceipt(
+    let rawBase64 = body.receiptImageBase64 || '';
+    if (rawBase64.includes(',')) {
+      rawBase64 = rawBase64.split(',')[1] || '';
+    }
+    const receiptBuffer = Buffer.from(rawBase64, 'base64');
+    const result = await this.ordersService.submitOrderWithReceipt(
       body.dto,
       receiptBuffer,
       body.authenticatedStudentId
     );
+
+    // Save actual receipt screenshot bytes to disk for admin viewing
+    try {
+      const receiptsDir = path.join(process.cwd(), 'data', 'receipts');
+      if (!fs.existsSync(receiptsDir)) {
+        fs.mkdirSync(receiptsDir, { recursive: true });
+      }
+      fs.writeFileSync(path.join(receiptsDir, `${result.orderId}.img`), receiptBuffer);
+    } catch (saveErr) {
+      console.error('[OrdersPaymentsController] Failed to persist receipt image:', saveErr);
+    }
+
+    return result;
   }
 
   @Post(':id/approve')
@@ -63,7 +108,13 @@ export class OrdersPaymentsController {
     }
   ) {
     const actor = body?.actor || DEFAULT_SUPER_ADMIN;
-    const amount = body?.verifiedAmountETB ?? 1200;
+    let amount: number;
+    if (body?.verifiedAmountETB !== undefined) {
+      amount = body.verifiedAmountETB;
+    } else {
+      const order = await this.ordersService.getOrderById(orderId);
+      amount = order?.expectedAmountETB ?? 350;
+    }
     return this.ordersService.approveOrderReceipt(
       actor,
       orderId,

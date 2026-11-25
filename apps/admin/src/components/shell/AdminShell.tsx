@@ -577,6 +577,66 @@ export function AdminShell({
             <span>Pricing</span>
           </Link>
 
+          {/* Announcements */}
+          <Link
+            href="/announcements"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: SPACING.md,
+              padding: `${SPACING.sm}px ${SPACING.md}px`,
+              borderRadius: RADIUS.md,
+              backgroundColor: currentPath.startsWith('/announcements') ? tokens.primary : 'transparent',
+              color: tokens.sidebarText,
+              textDecoration: 'none',
+              fontSize: 13,
+              fontWeight: currentPath.startsWith('/announcements') ? 600 : 500,
+            }}
+          >
+            <Bell size={18} strokeWidth={2} />
+            <span>Announcements</span>
+          </Link>
+
+          {/* Reports & Analytics */}
+          <Link
+            href="/reports"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: SPACING.md,
+              padding: `${SPACING.sm}px ${SPACING.md}px`,
+              borderRadius: RADIUS.md,
+              backgroundColor: currentPath.startsWith('/reports') ? tokens.primary : 'transparent',
+              color: tokens.sidebarText,
+              textDecoration: 'none',
+              fontSize: 13,
+              fontWeight: currentPath.startsWith('/reports') ? 600 : 500,
+            }}
+          >
+            <BarChart3 size={18} strokeWidth={2} />
+            <span>Reports & Analytics</span>
+          </Link>
+
+          {/* System Audit Logs */}
+          <Link
+            href="/audit-log"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: SPACING.md,
+              padding: `${SPACING.sm}px ${SPACING.md}px`,
+              borderRadius: RADIUS.md,
+              backgroundColor: currentPath.startsWith('/audit-log') ? tokens.primary : 'transparent',
+              color: tokens.sidebarText,
+              textDecoration: 'none',
+              fontSize: 13,
+              fontWeight: currentPath.startsWith('/audit-log') ? 600 : 500,
+            }}
+          >
+            <Shield size={18} strokeWidth={2} />
+            <span>Audit Logs</span>
+          </Link>
+
           {/* Support */}
           <Link
             href="/support"

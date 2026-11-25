@@ -1,0 +1,51 @@
+[
+  {
+    "id": "t-101",
+    "ticketId": "t-101",
+    "studentId": "stu-seed-1",
+    "studentCode": "MS0001",
+    "studentName": "Abebe Bikila",
+    "universityAndProgram": "Addis Ababa University • Natural Science",
+    "phone": "+251 911 022 344",
+    "categoryLabel": "Device & Login",
+    "subject": "Lost phone, please unbind hardware",
+    "messageBody": "Hello Mastera support, I lost my old phone on campus. I bought a new Android phone and need to access my enrolled courses for mid exams.",
+    "message": "Hello Mastera support, I lost my old phone on campus. I bought a new Android phone and need to access my enrolled courses for mid exams.",
+    "status": "OPEN",
+    "createdAt": "2026-11-22T14:43:09.243Z",
+    "updatedAt": "2026-11-22T14:43:09.243Z"
+  },
+  {
+    "id": "t-102",
+    "ticketId": "t-102",
+    "studentId": "stu-seed-2",
+    "studentCode": "MS0002",
+    "studentName": "Dawit Bekele",
+    "universityAndProgram": "Bahir Dar University • Engineering",
+    "phone": "+251 922 334 455",
+    "categoryLabel": "Payment & Receipts",
+    "subject": "Uploaded CBE receipt but still pending",
+    "messageBody": "I paid 270 ETB via CBE mobile banking. Could you please verify my transaction reference FT2428909123?",
+    "message": "I paid 270 ETB via CBE mobile banking. Could you please verify my transaction reference FT2428909123?",
+    "status": "OPEN",
+    "createdAt": "2026-11-22T13:28:09.243Z",
+    "updatedAt": "2026-11-22T13:28:09.243Z"
+  },
+  {
+    "id": "t-103",
+    "ticketId": "t-103",
+    "studentId": "stu-seed-3",
+    "studentCode": "MS0003",
+    "studentName": "Almaz Ayana",
+    "universityAndProgram": "Hawassa University • Social Science",
+    "phone": "+251 933 445 566",
+    "categoryLabel": "Material & Downloads",
+    "subject": "Missing Chapter 4 offline quiz download",
+    "messageBody": "When I download Chapter 4, the formulas load slowly in offline mode. Please confirm if there is an update.",
+    "message": "When I download Chapter 4, the formulas load slowly in offline mode. Please confirm if there is an update.",
+    "status": "RESOLVED",
+    "replyMessage": "We have rebuilt and published package v2 with compressed KaTeX assets. Please tap Check for Updates on your mobile dashboard.",
+    "createdAt": "2026-11-21T15:28:09.243Z",
+    "updatedAt": "2026-11-22T03:28:09.243Z"
+  }
+]

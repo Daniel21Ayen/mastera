@@ -19,6 +19,9 @@ const API_PREFIXES = [
   '/questions',
   '/student',
   '/admin',
+  '/announcements',
+  '/support',
+  '/audit',
 ];
 
 const originalEnhanceMiddleware = config.server?.enhanceMiddleware;

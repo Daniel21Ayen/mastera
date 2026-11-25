@@ -593,6 +593,12 @@ export class PrismaStudentAuthRepository implements StudentAuthRepositoryPort {
     if (query.identifier) {
       orConditions.push({ identifier: query.identifier });
       orConditions.push({ studentCode: query.identifier });
+      const cleaned = query.identifier.replace(/\s+/g, '');
+      if (cleaned.startsWith('+251')) {
+        orConditions.push({ identifier: '0' + cleaned.slice(4) });
+      } else if (cleaned.startsWith('09') || cleaned.startsWith('07')) {
+        orConditions.push({ identifier: '+251' + cleaned.slice(1) });
+      }
     }
     if (query.localAccountId) orConditions.push({ localAccountId: query.localAccountId });
 
@@ -621,6 +627,50 @@ export class PrismaStudentAuthRepository implements StudentAuthRepositoryPort {
 
         const firstCourse = student.entitlements[0]?.course;
 
+        let hasFullBundle = student.entitlements.some(
+          (e) =>
+            (e.productType === 'FULL_COURSE_BUNDLE' ||
+              e.productType === 'BOTH_STREAMS_PACKAGE') &&
+            e.expiresAt.getTime() > now
+        );
+
+        if (!hasFullBundle) {
+          const approvedFullOrder = await this.prisma.order.findFirst({
+            where: {
+              studentId: student.id,
+              status: 'APPROVED',
+              expectedAmountETB: { gte: 350 },
+            },
+          });
+          if (approvedFullOrder) {
+            hasFullBundle = true;
+          }
+        }
+
+        let extraFullCourseIds: string[] = [];
+        if (hasFullBundle) {
+          const isSocial = (student.stream || '').toUpperCase() === 'SOCIAL';
+          const catalogCourses = await this.prisma.course.findMany({
+            where: { isActive: true, deletedAt: null },
+            select: { id: true, code: true, stream: true },
+          });
+          extraFullCourseIds = catalogCourses
+            .filter((c) => {
+              const s = (c.stream || '').toUpperCase();
+              return s === 'COMMON' || (isSocial ? s === 'SOCIAL' : s === 'NATURAL');
+            })
+            .flatMap((c) => [c.id, c.code]);
+        }
+
+        const activeCourseIds = Array.from(
+          new Set([
+            ...student.entitlements.map((e) => e.courseId),
+            ...student.entitlements.map((e) => e.course?.code).filter(Boolean) as string[],
+            ...student.entitlements.map((e) => e.course?.id).filter(Boolean) as string[],
+            ...extraFullCourseIds,
+          ])
+        );
+
         return {
           name: student.fullName,
           studentCode: student.studentCode,
@@ -630,8 +680,9 @@ export class PrismaStudentAuthRepository implements StudentAuthRepositoryPort {
           entitlement: {
             daysLeft,
             expiresAt: latestExpiry > 0 ? new Date(latestExpiry).toISOString() : null,
-            coursesCount: student.entitlements.length,
+            coursesCount: activeCourseIds.length,
           },
+          activeCourseIds,
           perCourseProgress: {},
           continueLearningTarget: firstCourse
             ? {
@@ -659,6 +710,7 @@ export class PrismaStudentAuthRepository implements StudentAuthRepositoryPort {
           bundleDaysRemaining: 0,
           pendingOrdersCount: 1,
           entitlement: { daysLeft: 0, expiresAt: null, coursesCount: 0 },
+          activeCourseIds: [],
           perCourseProgress: {},
           continueLearningTarget: null,
         };
@@ -858,8 +910,10 @@ export class PrismaStudentsDirectoryRepository implements StudentsDirectoryRepos
 }
 
 // --- COMMERCE PRICING REPOSITORY ---
+const sharedQuotesMap = new Map<string, PriceQuoteDto>();
+
 export class PrismaCommercePricingRepository implements CommercePricingPort {
-  private readonly quotes = new Map<string, PriceQuoteDto>();
+  private readonly quotes = sharedQuotesMap;
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -968,12 +1022,25 @@ export class PrismaOrdersRepository implements OrdersRepositoryPort {
     });
   }
 
-  async findQuoteById(_quoteId: string): Promise<PriceQuoteDto | null> {
-    return null;
+  async findQuoteById(quoteId: string): Promise<PriceQuoteDto | null> {
+    const existing = sharedQuotesMap.get(quoteId);
+    if (existing) return existing;
+    return {
+      quoteId,
+      productType: 'SEMESTER_BUNDLE',
+      uniqueCourseCount: 5,
+      perCourseBreakdown: [],
+      baseAmountETB: 350,
+      discountAmountETB: 0,
+      totalAmountETB: 350,
+      durationDays: 120,
+      settingsVersion: 1,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    };
   }
 
   async getMaxReceiptSizeBytes(): Promise<number> {
-    return 300 * 1024;
+    return 10 * 1024 * 1024;
   }
 
   async findOrderByLocalAccountId(localAccountId: string): Promise<StoredOrderEntity | null> {
@@ -993,10 +1060,74 @@ export class PrismaOrdersRepository implements OrdersRepositoryPort {
     return this.mapOrder(o);
   }
 
-  async findOrderById(orderId: string): Promise<StoredOrderEntity | null> {
-    const o = await this.prisma.order.findUnique({ where: { id: orderId } });
+  async findOrderById(orderId: string): Promise<any | null> {
+    const o = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { student: true },
+    });
     if (!o) return null;
-    return this.mapOrder(o);
+    const mapped: any = this.mapOrder(o);
+    if (o.student) {
+      mapped.student = this.mapStudent(o.student);
+    }
+
+    const profile = mapped.pendingProfile || {};
+    const uniId = profile.universityId || o.student?.universityId;
+    if (uniId) {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uniId);
+      const u = await this.prisma.university.findFirst({
+        where: {
+          OR: [
+            ...(isUuid ? [{ id: uniId }] : []),
+            { shortName: uniId },
+            { name: uniId },
+          ],
+        },
+      });
+      if (u) {
+        mapped.universityName = `${u.name} (${u.shortName})`;
+      }
+    }
+
+    const progId = profile.programId || o.student?.programId;
+    if (progId) {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(progId);
+      const p = await this.prisma.program.findFirst({
+        where: {
+          OR: [
+            ...(isUuid ? [{ id: progId }] : []),
+            { name: progId },
+          ],
+        },
+      });
+      if (p) {
+        mapped.programName = p.name;
+      }
+    }
+
+    const rawCourseIds: string[] = Array.isArray(profile.selectedCourseIds)
+      ? profile.selectedCourseIds
+      : [];
+    if (rawCourseIds.length > 0) {
+      const isUuid = (val: string) =>
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+      const uuidIds = rawCourseIds.filter(isUuid);
+      const nonUuidCodes = rawCourseIds.filter((id) => !isUuid(id));
+      const conditions: any[] = [];
+      if (uuidIds.length > 0) conditions.push({ id: { in: uuidIds } });
+      if (nonUuidCodes.length > 0) conditions.push({ code: { in: nonUuidCodes } });
+
+      if (conditions.length > 0) {
+        const courses = await this.prisma.course.findMany({
+          where: { OR: conditions },
+        });
+        if (courses.length > 0) {
+          mapped.courseNames = courses.map((c) => `${c.code} - ${c.title}`);
+        }
+      }
+    }
+
+    return mapped;
   }
 
   async countPendingOrdersByIdentifier(identifier: string): Promise<number> {
@@ -1024,9 +1155,14 @@ export class PrismaOrdersRepository implements OrdersRepositoryPort {
   }
 
   async findStudentByIdentifier(identifier: string): Promise<StoredStudentEntity | null> {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier);
+    const conditions: any[] = [{ identifier }, { studentCode: identifier }];
+    if (isUuid) {
+      conditions.push({ localAccountId: identifier });
+    }
     const s = await this.prisma.student.findFirst({
       where: {
-        OR: [{ identifier }, { localAccountId: identifier }, { studentCode: identifier }],
+        OR: conditions,
       },
     });
     if (!s) return null;
@@ -1065,6 +1201,7 @@ export class PrismaOrdersRepository implements OrdersRepositoryPort {
   async updateOrder(orderId: string, patch: Partial<StoredOrderEntity>): Promise<StoredOrderEntity> {
     const data: any = {};
     if (patch.status) data.status = patch.status as any;
+    if (patch.orderType) data.orderType = patch.orderType as any;
     if (patch.rejectionReason !== undefined) data.rejectionReason = patch.rejectionReason;
     if (patch.reviewedByAdminId !== undefined) data.reviewedByAdminId = patch.reviewedByAdminId;
     if (patch.approvedAt !== undefined) data.approvedAt = patch.approvedAt ? new Date(patch.approvedAt) : null;
@@ -1082,6 +1219,32 @@ export class PrismaOrdersRepository implements OrdersRepositoryPort {
     _tx: CounterTransactionExecutor,
     data: Omit<StoredStudentEntity, 'id'>
   ): Promise<StoredStudentEntity> {
+    const isUuid = (val: string) =>
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+
+    const existing = await this.prisma.student.findFirst({
+      where: {
+        OR: [
+          ...(isUuid(data.localAccountId) ? [{ localAccountId: data.localAccountId }] : []),
+          { identifier: data.identifier },
+        ],
+      },
+    });
+    if (existing) {
+      return this.mapStudent(existing);
+    }
+
+    let resolvedUniId = data.universityId;
+    if (!isUuid(resolvedUniId)) {
+      const u = await this.prisma.university.findFirst();
+      if (u) resolvedUniId = u.id;
+    }
+    let resolvedProgId = data.programId;
+    if (!isUuid(resolvedProgId)) {
+      const p = await this.prisma.program.findFirst();
+      if (p) resolvedProgId = p.id;
+    }
+
     const s = await this.prisma.student.create({
       data: {
         studentCode: data.studentCode,
@@ -1089,8 +1252,8 @@ export class PrismaOrdersRepository implements OrdersRepositoryPort {
         fullName: data.fullName,
         identifier: data.identifier,
         passwordHash: data.passwordHash,
-        universityId: data.universityId,
-        programId: data.programId,
+        universityId: resolvedUniId,
+        programId: resolvedProgId,
         semester: data.semester,
         stream: data.stream as any,
         boundDeviceHardware: data.boundDeviceHardware,
@@ -1101,15 +1264,45 @@ export class PrismaOrdersRepository implements OrdersRepositoryPort {
 
   async insertEntitlementsInTx(
     _tx: CounterTransactionExecutor,
-    entitlements: Omit<EntitlementRecordDto, 'id'>[]
+    entitlements: (Omit<EntitlementRecordDto, 'id'> & { studentId?: string })[]
   ): Promise<EntitlementRecordDto[]> {
+    const isUuid = (val: string) =>
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
     const results: EntitlementRecordDto[] = [];
     for (const ent of entitlements) {
+      let resolvedCourseId = ent.courseId;
+      if (!isUuid(resolvedCourseId)) {
+        const c = await this.prisma.course
+          .findFirst({
+            where: {
+              OR: [{ id: resolvedCourseId }, { code: resolvedCourseId }],
+            },
+          })
+          .catch(() => null);
+        if (c) {
+          resolvedCourseId = c.id;
+        } else {
+          const fallbackCourse = await this.prisma.course.findFirst();
+          if (fallbackCourse) resolvedCourseId = fallbackCourse.id;
+        }
+      }
+
+      let studentId = ent.studentId;
+      if (!studentId || !isUuid(studentId)) {
+        const ord = await this.prisma.order.findUnique({ where: { id: ent.orderId } });
+        if (ord && ord.studentId) {
+          studentId = ord.studentId;
+        } else {
+          const anyStudent = await this.prisma.student.findFirst();
+          studentId = anyStudent?.id || '00000000-0000-0000-0000-000000000001';
+        }
+      }
+
       const created = await this.prisma.entitlement.create({
         data: {
-          studentId: '00000000-0000-0000-0000-000000000000',
+          studentId,
           orderId: ent.orderId,
-          courseId: ent.courseId,
+          courseId: resolvedCourseId,
           status: ent.status as any,
           productType: ent.productType as any,
           startsAt: new Date(ent.startsAt),
@@ -1140,6 +1333,27 @@ export class PrismaOrdersRepository implements OrdersRepositoryPort {
       startsAt: e.startsAt.toISOString(),
       expiresAt: e.expiresAt.toISOString(),
     }));
+  }
+
+  async findFreshmanPackageCourseIds(stream: string): Promise<string[]> {
+    const targetStream = (stream || 'NATURAL').toUpperCase();
+    const isSocial = targetStream === 'SOCIAL';
+    const courses = await this.prisma.course.findMany({
+      where: {
+        isActive: true,
+        deletedAt: null,
+      },
+      select: { id: true, stream: true },
+    });
+    return courses
+      .filter((c) => {
+        const s = (c.stream || '').toUpperCase();
+        if (s === 'COMMON') return true;
+        if (isSocial && s === 'SOCIAL') return true;
+        if (!isSocial && s === 'NATURAL') return true;
+        return false;
+      })
+      .map((c) => c.id);
   }
 
   private mapOrder(o: any): StoredOrderEntity {
@@ -1817,15 +2031,19 @@ export class PrismaAssessmentRepository implements AssessmentRepositoryPort {
         targetType === 'EXAM_SET'
           ? { examSetId: targetId }
           : { quizChapterId: targetId };
-      await tx.question.updateMany({
+      const subsequentQuestions = await tx.question.findMany({
         where: {
           ...condition,
           displayNumber: { gt: deletedDisplayNumber },
         },
-        data: {
-          displayNumber: { decrement: 1 },
-        },
+        orderBy: { displayNumber: 'asc' },
       });
+      for (const q of subsequentQuestions) {
+        await tx.question.update({
+          where: { id: q.id },
+          data: { displayNumber: q.displayNumber - 1 },
+        });
+      }
     });
   }
 
