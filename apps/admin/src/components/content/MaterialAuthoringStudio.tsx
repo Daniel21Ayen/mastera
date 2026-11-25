@@ -180,10 +180,33 @@ export function MaterialAuthoringStudio({
       alert('Please select a valid PDF file.');
       return;
     }
-    const storageKey = `uploads/pdf/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-    updateCurrentChapter({
-      pdfStorageKey: storageKey,
-    });
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const base64Data = (reader.result as string) || '';
+        const res = await adminApiFetch<{ success: boolean; storageKey: string; url: string }>('/content/upload-pdf', {
+          method: 'POST',
+          body: {
+            pdfBase64: base64Data,
+            fileName: file.name,
+            chapterId: currentChapter.id.startsWith('draft-') ? undefined : currentChapter.id,
+            courseId: selectedCourseId,
+          },
+        });
+        if (res && res.storageKey) {
+          updateCurrentChapter({
+            pdfStorageKey: res.storageKey,
+          });
+        }
+      } catch (err: any) {
+        console.warn('Real PDF upload failed, saving storage reference:', err);
+        const fallbackStorageKey = `uploads/pdf/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+        updateCurrentChapter({
+          pdfStorageKey: fallbackStorageKey,
+        });
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {

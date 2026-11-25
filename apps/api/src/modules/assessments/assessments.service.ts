@@ -136,6 +136,10 @@ export interface AssessmentRepositoryPort {
     questionId: string,
     newDisplayNumber: number
   ): Promise<StoredQuestionRecord>;
+  updateQuestion?(
+    id: string,
+    patch: Partial<StoredQuestionRecord>
+  ): Promise<StoredQuestionRecord>;
   deleteQuestionAndRenumberLaterOnes(
     targetType: 'EXAM_SET' | 'QUIZ_CHAPTER',
     targetId: string,
@@ -451,6 +455,44 @@ export class AssessmentsService {
     }
 
     return this.repo.updateQuestionDisplayNumber(questionId, newDisplayNumber);
+  }
+
+  async updateQuestion(
+    actor: AuthenticatedAdminContext,
+    questionId: string,
+    patch: Partial<CreateQuestionInput>
+  ): Promise<StoredQuestionRecord> {
+    const question = await this.repo.findQuestionById(questionId);
+    if (!question) {
+      throw new Error('Question not found.');
+    }
+
+    const decision = await this.scopeAuth.authorizeAdminAction(
+      actor,
+      'QUESTIONS_AUTHOR_SCOPED',
+      {}
+    );
+    if (!decision.allowed) {
+      throw new Error(`${decision.errorCode}: ${decision.reason}`);
+    }
+
+    if (!this.repo.updateQuestion) {
+      throw new Error('updateQuestion is not supported by repository');
+    }
+
+    const updatePayload: Partial<StoredQuestionRecord> = {};
+    if (patch.promptLatex !== undefined) updatePayload.promptLatex = patch.promptLatex.trim();
+    if (patch.questionType !== undefined) updatePayload.questionType = patch.questionType;
+    if (patch.options !== undefined) updatePayload.options = patch.options;
+    if (patch.correctOptionId !== undefined) updatePayload.correctOptionId = patch.correctOptionId;
+    if (patch.correctBoolean !== undefined) updatePayload.correctBoolean = patch.correctBoolean;
+    if (patch.acceptedAnswers !== undefined) updatePayload.acceptedAnswers = patch.acceptedAnswers;
+    if (patch.explanationLatex !== undefined) updatePayload.explanationLatex = patch.explanationLatex.trim();
+    if ((patch as any).status !== undefined) updatePayload.status = (patch as any).status;
+
+    const updated = await this.repo.updateQuestion(questionId, updatePayload);
+
+    return updated;
   }
 
   /**

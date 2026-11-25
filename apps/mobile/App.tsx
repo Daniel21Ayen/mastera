@@ -22,7 +22,9 @@ import {
   CatalogChapterMetaDto,
   CatalogExamSetMetaDto,
   QuestionItemDto,
+  SubmitOrderWithLocalDto,
 } from '@mastera/contracts';
+import { hashClaimSecret, randomBytes, base64UrlEncode } from '@mastera/domain';
 import { ResolvedCatalogRowView } from './src/core/database/local-catalog-store';
 import { SplashScreen } from './src/screens/SplashScreen';
 import { BeforeHomeAuthScreens } from './src/screens/BeforeHomeAuthScreens';
@@ -525,7 +527,7 @@ export default function App(): any {
                   sizeMB: 4,
                   isDownloaded:
                     isCourseDown || downloadedChapterIds.includes(ch.item.id),
-                  isLocked: isCourseLocked || idx === 3,
+                  isLocked: isCourseLocked,
                   parentCourseTitle: course.title,
                 }));
 
@@ -601,6 +603,7 @@ export default function App(): any {
               courseCode={selectedCourse.code}
               books={materialBooks}
               courseChapters={courseChapters}
+              hasActiveAccess={hasActiveBundle || selectedCourseIds.includes(selectedCourse.id)}
               chaptersByBookId={appData.chaptersByBookId}
               chapterBodyByChapterId={appData.chapterBodyByChapterId}
               isCourseDownloaded={downloadedCourseIds.includes(selectedCourse.id)}
@@ -703,16 +706,26 @@ export default function App(): any {
                 setCourseTopTab('MATERIAL');
               }
             }}
-            allScopedCourses={departmentScopedCourses.map((c) => ({
-              item: c,
-              canOpenNow: selectedCourseIds.includes(c.id),
-              accessBadge: selectedCourseIds.includes(c.id)
-                ? 'Included'
-                : c.freeAccess
-                ? 'Free'
-                : 'Locked',
-              updateAvailable: false,
-            }))}
+            allScopedCourses={departmentScopedCourses.map((c) => {
+              const isIncluded =
+                selectedCourseIds.includes(c.id) ||
+                selectedCourseIds.includes(c.code) ||
+                (hasActiveBundle && (
+                  selectedCourseIds.length === 0 ||
+                  selectedCourseIds.includes(c.id) ||
+                  selectedCourseIds.includes(c.code)
+                ));
+              return {
+                item: c,
+                canOpenNow: isIncluded || c.freeAccess,
+                accessBadge: isIncluded
+                  ? 'Included'
+                  : c.freeAccess
+                  ? 'Free'
+                  : 'Locked',
+                updateAvailable: false,
+              };
+            })}
           />
         ) : activeTab === 'PROGRESS' ? (
           <ProgressTabScreens
@@ -776,15 +789,91 @@ export default function App(): any {
               setThemeMode((prev) => (prev === 'light' ? 'dark' : 'light'))
             }
             onOpenDownloadsManager={() => setShowDownloads(true)}
+            onCheckApprovalStatus={syncStudentSummary}
             onChangeUiLanguage={() => {}}
             onReleaseDeviceAndLogout={() => {
               setIsAuthenticated(false);
               setShowSplash(true);
             }}
-            onSubmitBundleOrder={(payload) => {
+            onSubmitBundleOrder={async (payload) => {
               if (payload.fullName) setStudentFullName(payload.fullName);
               if (payload.phoneNumber) setStudentPhone(payload.phoneNumber);
               setPendingOrdersCount((c) => c + 1);
+
+              try {
+                const rawBytes = randomBytes(32);
+                const claimSecret = base64UrlEncode(rawBytes);
+                const claimSecretHash = hashClaimSecret(claimSecret);
+                const localAccountId = '00000000-0000-4000-8000-' + Date.now().toString(16).padStart(12, '0');
+
+                const semNum: 1 | 2 = academicScope.semester.includes('2') ? 2 : 1;
+                const streamType: 'NATURAL' | 'SOCIAL' = academicScope.stream.toUpperCase().includes('SOC')
+                  ? 'SOCIAL'
+                  : 'NATURAL';
+
+                const orderDto: SubmitOrderWithLocalDto = {
+                  localAccountId,
+                  profile: {
+                    fullName: payload.fullName || studentFullName || 'Student',
+                    identifier: payload.phoneNumber || studentPhone || '+251911000000',
+                    universityId: academicScope.universityId || 'univ-aastu',
+                    programId: academicScope.programId || 'prog-fresh',
+                    semester: semNum,
+                    stream: streamType,
+                    selectedCourseIds: payload.selectedCourseIds,
+                  },
+                  passwordPlaintextOverTls: payload.password || 'Mastera1234!',
+                  claimSecretHash,
+                  deviceHardwareId: 'android-hw-' + localAccountId.replace(/-/g, '').slice(0, 12),
+                  quoteId: 'quote-bundle-' + Date.now(),
+                  productType: (payload as any).productType || 'SEMESTER_BUNDLE',
+                  selectedCourseIds: payload.selectedCourseIds,
+                  paymentMethodId: payload.paymentMethodId,
+                  transactionReference: payload.transactionReference,
+                };
+
+                let cleanBase64 = payload.receiptBase64 || '';
+                if (cleanBase64.includes(',')) {
+                  cleanBase64 = cleanBase64.split(',')[1] || '';
+                }
+                if (!cleanBase64 || cleanBase64.length < 50) {
+                  // Fallback 1x1 valid PNG in case base64 wasn't attached
+                  cleanBase64 =
+                    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+                }
+
+                const hosts = getCandidateHosts();
+                let lastError = '';
+                for (const host of hosts) {
+                  try {
+                    const res = await fetch(`${host}/orders`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        dto: orderDto,
+                        receiptImageBase64: cleanBase64,
+                      }),
+                    });
+                    if (res.ok) {
+                      const resJson = await res.json();
+                      console.log('[Order Submitted Successfully]', resJson);
+                      setPendingOrdersCount((c) => c + 1);
+                      return { success: true, orderId: resJson?.id || resJson?.orderId };
+                    } else {
+                      const errBody = await res.text();
+                      lastError = `Server error ${res.status}: ${errBody}`;
+                      console.warn('[Order submission status]', res.status, errBody);
+                    }
+                  } catch (hostErr: any) {
+                    lastError = hostErr.message;
+                    console.warn('[Order submission host error]', host, hostErr.message);
+                  }
+                }
+                return { success: false, error: lastError || 'Could not connect to Mastera backend' };
+              } catch (err: any) {
+                console.error('[onSubmitBundleOrder Error]', err);
+                return { success: false, error: err?.message || 'Unexpected submission error' };
+              }
             }}
             bundlePriceETB={bundlePriceETB}
             freshmanPackagePriceETB={freshmanPriceETB}

@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Bell, AlertTriangle, Info, CheckCircle2, XCircle, Trash2 } from 'lucide-react';
 import { ADMIN_THEMES, RADIUS, SPACING } from '@mastera/ui-tokens';
 import { PaginatedTable } from '@/components/shared/PaginatedTable';
+import { adminApiFetch } from '@/lib/api-client';
 
 interface AnnouncementItem {
   id: string;
@@ -21,42 +22,9 @@ export default function AnnouncementsPage(): React.ReactElement {
   const tokens = ADMIN_THEMES.light;
   const [currentPage, setCurrentPage] = useState(1);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-
-  const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([
-    {
-      id: 'ann-1',
-      title: 'First Semester Mid Exams Schedule Released',
-      body: 'All AASTU freshman students: Mid examinations begin next Monday. Ensure your offline materials are downloaded.',
-      scopeType: 'UNIVERSITY',
-      scopeTargetName: 'AASTU',
-      priority: 'HIGH',
-      isActive: true,
-      publishedAt: '2024-11-01',
-      expiresAt: '2024-11-15',
-    },
-    {
-      id: 'ann-2',
-      title: 'Platform Maintenance on Sunday 2:00 AM - 4:00 AM',
-      body: 'Payment verification and receipt uploads will be briefly paused for database maintenance.',
-      scopeType: 'ALL',
-      scopeTargetName: 'All Students',
-      priority: 'NORMAL',
-      isActive: true,
-      publishedAt: '2024-11-05',
-      expiresAt: '2024-11-10',
-    },
-    {
-      id: 'ann-3',
-      title: 'Applied Math I Chapter 4 Calculus Quiz Live',
-      body: 'Test your knowledge on differential applications. Pass mark is 70%.',
-      scopeType: 'COURSE',
-      scopeTargetName: 'MATH101',
-      priority: 'NORMAL',
-      isActive: true,
-      publishedAt: '2024-11-06',
-      expiresAt: '2024-11-20',
-    },
-  ]);
+  const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [newAnn, setNewAnn] = useState({
     title: '',
@@ -64,43 +32,82 @@ export default function AnnouncementsPage(): React.ReactElement {
     scopeType: 'ALL' as 'ALL' | 'UNIVERSITY' | 'PROGRAM' | 'COURSE',
     scopeTargetName: 'All Students',
     priority: 'NORMAL' as 'NORMAL' | 'HIGH' | 'URGENT',
-    expiresAt: '2024-11-30',
+    expiresAt: new Date(Date.now() + 86400000 * 30).toISOString().split('T')[0] ?? '',
   });
 
-  const handleAdd = (e: React.FormEvent) => {
+  const loadAnnouncements = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await adminApiFetch<AnnouncementItem[]>('/announcements');
+      if (Array.isArray(res)) {
+        setAnnouncements(res);
+      }
+    } catch (err) {
+      console.error('Failed to load announcements from API:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadAnnouncements();
+  }, [loadAnnouncements]);
+
+  const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newAnn.title || !newAnn.body) return;
-    const item: AnnouncementItem = {
-      id: `ann-${Date.now()}`,
-      title: newAnn.title.trim(),
-      body: newAnn.body.trim(),
-      scopeType: newAnn.scopeType,
-      scopeTargetName: newAnn.scopeTargetName,
-      priority: newAnn.priority,
-      isActive: true,
-      publishedAt: new Date().toISOString().split('T')[0] ?? '',
-      expiresAt: newAnn.expiresAt,
-    };
-    setAnnouncements((prev) => [item, ...prev]);
-    setIsAddModalOpen(false);
-    setNewAnn({
-      title: '',
-      body: '',
-      scopeType: 'ALL',
-      scopeTargetName: 'All Students',
-      priority: 'NORMAL',
-      expiresAt: '2024-11-30',
-    });
+    if (!newAnn.title.trim() || !newAnn.body.trim()) return;
+
+    try {
+      setIsSubmitting(true);
+      await adminApiFetch('/announcements', {
+        method: 'POST',
+        body: { data: newAnn },
+      });
+      setIsAddModalOpen(false);
+      setNewAnn({
+        title: '',
+        body: '',
+        scopeType: 'ALL',
+        scopeTargetName: 'All Students',
+        priority: 'NORMAL',
+        expiresAt: new Date(Date.now() + 86400000 * 30).toISOString().split('T')[0] ?? '',
+      });
+      await loadAnnouncements();
+    } catch (err: any) {
+      console.error('Failed to create announcement:', err);
+      alert(`Failed to create announcement: ${err?.message || 'Server error'}`);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleToggleActive = (id: string) => {
-    setAnnouncements((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, isActive: !a.isActive } : a))
-    );
+  const handleToggleActive = async (id: string) => {
+    const target = announcements.find((a) => a.id === id);
+    if (!target) return;
+
+    try {
+      await adminApiFetch(`/announcements/${id}`, {
+        method: 'PUT',
+        body: { data: { isActive: !target.isActive } },
+      });
+      setAnnouncements((prev) =>
+        prev.map((a) => (a.id === id ? { ...a, isActive: !a.isActive } : a))
+      );
+    } catch (err: any) {
+      console.error('Failed to toggle status:', err);
+      alert(`Failed to update status: ${err?.message || 'Server error'}`);
+    }
   };
 
-  const handleDelete = (id: string) => {
-    setAnnouncements((prev) => prev.filter((a) => a.id !== id));
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this broadcast announcement?')) return;
+    try {
+      await adminApiFetch(`/announcements/${id}`, { method: 'DELETE' });
+      await loadAnnouncements();
+    } catch (err: any) {
+      console.error('Failed to delete announcement:', err);
+      alert(`Failed to delete announcement: ${err?.message || 'Server error'}`);
+    }
   };
 
   const columns = [
@@ -306,165 +313,188 @@ export default function AnnouncementsPage(): React.ReactElement {
         onPageChange={setCurrentPage}
       />
 
+      {/* Add Announcement Modal */}
       {isAddModalOpen && (
         <div
-          role="dialog"
           style={{
             position: 'fixed',
             inset: 0,
-            backgroundColor: 'rgba(15, 23, 42, 0.6)',
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 1000,
+            padding: 24,
           }}
         >
-          <form
-            onSubmit={handleAdd}
+          <div
             style={{
               backgroundColor: tokens.surface,
               borderRadius: RADIUS.lg,
+              width: '100%',
+              maxWidth: 520,
               padding: SPACING.xl,
-              width: 500,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: SPACING.md,
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
             }}
           >
-            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: tokens.textPrimary }}>
-              Create Scoped Announcement
-            </h3>
-
-            <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: tokens.textPrimary, marginBottom: SPACING.xs }}>
-                Title *
-              </label>
-              <input
-                required
-                type="text"
-                placeholder="e.g. Mid Examinations Schedule Announced"
-                value={newAnn.title}
-                onChange={(e) => setNewAnn({ ...newAnn, title: e.target.value })}
-                style={{
-                  width: '100%',
-                  padding: SPACING.sm,
-                  borderRadius: RADIUS.md,
-                  border: `1px solid ${tokens.border}`,
-                  fontSize: 13,
-                  boxSizing: 'border-box',
-                }}
-              />
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: tokens.textPrimary, marginBottom: SPACING.xs }}>
-                Announcement Message *
-              </label>
-              <textarea
-                required
-                rows={3}
-                placeholder="Write message details for the mobile announcement banner..."
-                value={newAnn.body}
-                onChange={(e) => setNewAnn({ ...newAnn, body: e.target.value })}
-                style={{
-                  width: '100%',
-                  padding: SPACING.sm,
-                  borderRadius: RADIUS.md,
-                  border: `1px solid ${tokens.border}`,
-                  fontSize: 13,
-                  boxSizing: 'border-box',
-                  resize: 'vertical',
-                }}
-              />
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: SPACING.sm }}>
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: tokens.textPrimary, margin: '0 0 16px 0' }}>
+              Create New Announcement
+            </h2>
+            <form onSubmit={handleAdd} style={{ display: 'flex', flexDirection: 'column', gap: SPACING.md }}>
               <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: tokens.textPrimary, marginBottom: SPACING.xs }}>
-                  Audience Scope
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: tokens.textMuted, marginBottom: 4 }}>
+                  Announcement Title
                 </label>
-                <select
-                  value={newAnn.scopeType}
-                  onChange={(e) => {
-                    const st = e.target.value as any;
-                    setNewAnn({
-                      ...newAnn,
-                      scopeType: st,
-                      scopeTargetName: st === 'ALL' ? 'All Students' : st,
-                    });
-                  }}
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g., Mid Exam Schedule Released"
+                  value={newAnn.title}
+                  onChange={(e) => setNewAnn({ ...newAnn, title: e.target.value })}
                   style={{
                     width: '100%',
-                    padding: SPACING.sm,
+                    padding: `${SPACING.sm}px ${SPACING.md}px`,
                     borderRadius: RADIUS.md,
                     border: `1px solid ${tokens.border}`,
                     fontSize: 13,
-                    backgroundColor: tokens.surface,
                     boxSizing: 'border-box',
                   }}
-                >
-                  <option value="ALL">All Enrolled Students</option>
-                  <option value="UNIVERSITY">Specific University (AASTU / AAU)</option>
-                  <option value="PROGRAM">Specific Department</option>
-                  <option value="COURSE">Single Course Enrollees</option>
-                </select>
+                />
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: tokens.textPrimary, marginBottom: SPACING.xs }}>
-                  Priority Level
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: tokens.textMuted, marginBottom: 4 }}>
+                  Broadcast Message Body
                 </label>
-                <select
-                  value={newAnn.priority}
-                  onChange={(e) => setNewAnn({ ...newAnn, priority: e.target.value as any })}
+                <textarea
+                  required
+                  rows={3}
+                  placeholder="Detailed broadcast notice for student mobile dashboard..."
+                  value={newAnn.body}
+                  onChange={(e) => setNewAnn({ ...newAnn, body: e.target.value })}
                   style={{
                     width: '100%',
-                    padding: SPACING.sm,
+                    padding: `${SPACING.sm}px ${SPACING.md}px`,
                     borderRadius: RADIUS.md,
                     border: `1px solid ${tokens.border}`,
                     fontSize: 13,
-                    backgroundColor: tokens.surface,
                     boxSizing: 'border-box',
                   }}
-                >
-                  <option value="NORMAL">Normal Notice</option>
-                  <option value="HIGH">High Priority</option>
-                  <option value="URGENT">Urgent Banner Alert</option>
-                </select>
+                />
               </div>
-            </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: SPACING.sm, marginTop: SPACING.sm }}>
-              <button
-                type="button"
-                onClick={() => setIsAddModalOpen(false)}
-                style={{
-                  padding: `${SPACING.sm}px ${SPACING.md}px`,
-                  borderRadius: RADIUS.md,
-                  border: `1px solid ${tokens.border}`,
-                  backgroundColor: tokens.surface,
-                  color: tokens.textPrimary,
-                  cursor: 'pointer',
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                style={{
-                  padding: `${SPACING.sm}px ${SPACING.md}px`,
-                  borderRadius: RADIUS.md,
-                  border: 'none',
-                  backgroundColor: tokens.primary,
-                  color: tokens.surface,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                Publish Announcement
-              </button>
-            </div>
-          </form>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: SPACING.md }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: tokens.textMuted, marginBottom: 4 }}>
+                    Audience Scope
+                  </label>
+                  <select
+                    value={newAnn.scopeType}
+                    onChange={(e: any) =>
+                      setNewAnn({
+                        ...newAnn,
+                        scopeType: e.target.value,
+                        scopeTargetName:
+                          e.target.value === 'ALL'
+                            ? 'All Students'
+                            : e.target.value === 'UNIVERSITY'
+                            ? 'All Universities'
+                            : 'Department Students',
+                      })
+                    }
+                    style={{
+                      width: '100%',
+                      padding: `${SPACING.sm}px ${SPACING.md}px`,
+                      borderRadius: RADIUS.md,
+                      border: `1px solid ${tokens.border}`,
+                      fontSize: 13,
+                      boxSizing: 'border-box',
+                    }}
+                  >
+                    <option value="ALL">All Enrolled Students</option>
+                    <option value="UNIVERSITY">Specific University</option>
+                    <option value="PROGRAM">Specific Department</option>
+                    <option value="COURSE">Single Course Enrollees</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: tokens.textMuted, marginBottom: 4 }}>
+                    Priority Level
+                  </label>
+                  <select
+                    value={newAnn.priority}
+                    onChange={(e: any) => setNewAnn({ ...newAnn, priority: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: `${SPACING.sm}px ${SPACING.md}px`,
+                      borderRadius: RADIUS.md,
+                      border: `1px solid ${tokens.border}`,
+                      fontSize: 13,
+                      boxSizing: 'border-box',
+                    }}
+                  >
+                    <option value="NORMAL">Normal Notice</option>
+                    <option value="HIGH">High Priority</option>
+                    <option value="URGENT">Urgent Exam / System Alert</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: tokens.textMuted, marginBottom: 4 }}>
+                  Expiry Date
+                </label>
+                <input
+                  type="date"
+                  value={newAnn.expiresAt}
+                  onChange={(e) => setNewAnn({ ...newAnn, expiresAt: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: `${SPACING.sm}px ${SPACING.md}px`,
+                    borderRadius: RADIUS.md,
+                    border: `1px solid ${tokens.border}`,
+                    fontSize: 13,
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: SPACING.sm, marginTop: SPACING.md }}>
+                <button
+                  type="button"
+                  onClick={() => setIsAddModalOpen(false)}
+                  style={{
+                    padding: `${SPACING.sm}px ${SPACING.md}px`,
+                    borderRadius: RADIUS.md,
+                    border: `1px solid ${tokens.border}`,
+                    backgroundColor: tokens.surface,
+                    color: tokens.textPrimary,
+                    fontSize: 13,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  style={{
+                    padding: `${SPACING.sm}px ${SPACING.md}px`,
+                    borderRadius: RADIUS.md,
+                    border: 'none',
+                    backgroundColor: tokens.primary,
+                    color: tokens.surface,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {isSubmitting ? 'Publishing...' : 'Publish Announcement'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

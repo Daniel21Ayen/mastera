@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { Plus, HelpCircle, FileSpreadsheet, CheckCircle2, Filter, Eye } from 'lucide-react';
+import { Plus, HelpCircle, FileSpreadsheet, CheckCircle2, Filter, Eye, Edit3, Trash2 } from 'lucide-react';
 import { ADMIN_THEMES, RADIUS, SPACING } from '@mastera/ui-tokens';
 import { PaginatedTable } from '@/components/shared/PaginatedTable';
+import { RowActionMenu } from '@/components/shared/RowActionMenu';
 import { BulkCsvImportModal } from '@/components/shared/BulkCsvImportModal';
 import { adminApiFetch } from '@/lib/api-client';
 import { CatalogCourseDto, CatalogProgramDto } from '@mastera/contracts';
@@ -35,11 +36,23 @@ interface QuizQuestionBankRow {
 
 export default function ContentQuizTabPage({ params }: QuizTabProps): React.ReactElement {
   const tokens = ADMIN_THEMES.light;
-  const currentTab = params.quizTab || 'chapter-quizzes';
+  const currentTab = params.quizTab || 'quiz-1';
 
   const [currentPage, setCurrentPage] = useState(1);
   const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
   const [selectedQuestion, setSelectedQuestion] = useState<QuizQuestionBankRow | null>(null);
+
+  // Edit Question State
+  const [editingQuestion, setEditingQuestion] = useState<QuizQuestionBankRow | null>(null);
+  const [editPromptLatex, setEditPromptLatex] = useState('');
+  const [editExplanationLatex, setEditExplanationLatex] = useState('');
+  const [editOptions, setEditOptions] = useState<{ id: string; textLatex: string }[]>([]);
+  const [editCorrectOptionId, setEditCorrectOptionId] = useState('');
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  // Delete Question State
+  const [deleteConfirmQuestion, setDeleteConfirmQuestion] = useState<QuizQuestionBankRow | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Filters from real DB: department, course, semester, stream
   const [programs, setPrograms] = useState<CatalogProgramDto[]>([]);
@@ -54,12 +67,136 @@ export default function ContentQuizTabPage({ params }: QuizTabProps): React.Reac
   const [loading, setLoading] = useState(true);
 
   const tabLabels: Record<string, string> = {
+    'quiz-1': 'Quiz 1 Question Bank',
+    'quiz-2': 'Quiz 2 Question Bank',
+    'quiz-3': 'Quiz 3 Question Bank',
     'chapter-quizzes': 'Chapter In-line Quiz Bank',
     'course-quizzes': 'Course-wide Quiz Bank',
     practice: 'Practice Assessment Bank',
   };
 
   const currentLabel = tabLabels[currentTab] || 'Quiz Question Bank';
+
+  const handleOpenEdit = (q: QuizQuestionBankRow) => {
+    setEditingQuestion(q);
+    setEditPromptLatex(q.promptLatex);
+    setEditExplanationLatex(q.explanationLatex || '');
+    setEditOptions(
+      q.options && q.options.length > 0
+        ? JSON.parse(JSON.stringify(q.options))
+        : [
+            { id: 'opt_1', textLatex: '' },
+            { id: 'opt_2', textLatex: '' },
+            { id: 'opt_3', textLatex: '' },
+            { id: 'opt_4', textLatex: '' },
+          ]
+    );
+    setEditCorrectOptionId(q.correctOptionId || (q.options?.[0]?.id || ''));
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingQuestion) return;
+    try {
+      setIsSavingEdit(true);
+      await adminApiFetch(`/assessments/questions/${editingQuestion.id}`, {
+        method: 'PUT',
+        body: {
+          promptLatex: editPromptLatex,
+          explanationLatex: editExplanationLatex,
+          options: editOptions,
+          correctOptionId: editCorrectOptionId || null,
+        },
+      });
+      setQuestions((prev) =>
+        prev.map((item) =>
+          item.id === editingQuestion.id
+            ? {
+                ...item,
+                promptLatex: editPromptLatex,
+                explanationLatex: editExplanationLatex,
+                options: editOptions,
+                correctOptionId: editCorrectOptionId || null,
+              }
+            : item
+        )
+      );
+      setEditingQuestion(null);
+    } catch (err: any) {
+      console.error('Failed to update question:', err);
+      alert(`Failed to save question: ${err?.message || 'Server error'}`);
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  const handleDeleteQuestion = async (id: string) => {
+    try {
+      setIsDeleting(true);
+      await adminApiFetch(`/assessments/questions/${id}`, { method: 'DELETE' });
+      setDeleteConfirmQuestion(null);
+      await loadQuestionBank();
+    } catch (err: any) {
+      console.error('Failed to delete question:', err);
+      alert(`Failed to delete question: ${err?.message || 'Server error'}`);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleUploadCsv = async (
+    csvText: string,
+    targetChapterId?: string,
+    courseId?: string
+  ) => {
+    const base64Content = typeof window !== 'undefined'
+      ? btoa(unescape(encodeURIComponent(csvText)))
+      : Buffer.from(csvText, 'utf-8').toString('base64');
+
+    const normalizedCategory = currentTab.toUpperCase().replace('-', '_');
+
+    const res = await adminApiFetch<{ report: any }>('/questions/csv-dry-run', {
+      method: 'POST',
+      body: {
+        csvContentBase64: base64Content,
+        targetType: 'QUIZ_CHAPTER',
+        targetId: targetChapterId || null,
+        category: normalizedCategory,
+        courseId: courseId || (selectedCourseId !== 'ALL' ? selectedCourseId : null),
+        programId: selectedProgramId !== 'ALL' ? selectedProgramId : null,
+        semester: selectedSemester !== 'ALL' ? selectedSemester : null,
+      },
+    });
+
+    return res.report;
+  };
+
+  const handleCommitImport = async (
+    csvText: string,
+    targetChapterId?: string,
+    courseId?: string
+  ) => {
+    const base64Content = typeof window !== 'undefined'
+      ? btoa(unescape(encodeURIComponent(csvText)))
+      : Buffer.from(csvText, 'utf-8').toString('base64');
+
+    const normalizedCategory = currentTab.toUpperCase().replace('-', '_');
+
+    await adminApiFetch('/questions/csv-import', {
+      method: 'POST',
+      body: {
+        csvContentBase64: base64Content,
+        targetType: 'QUIZ_CHAPTER',
+        targetId: targetChapterId || null,
+        category: normalizedCategory,
+        courseId: courseId || (selectedCourseId !== 'ALL' ? selectedCourseId : null),
+        programId: selectedProgramId !== 'ALL' ? selectedProgramId : null,
+      },
+    });
+
+    setIsCsvModalOpen(false);
+    await loadQuestionBank();
+    alert('Successfully imported quiz questions into database question bank!');
+  };
 
   const loadFilterMetadata = useCallback(async () => {
     try {
@@ -232,26 +369,14 @@ export default function ContentQuizTabPage({ params }: QuizTabProps): React.Reac
     {
       key: 'actions',
       header: 'Actions',
+      width: 70,
+      align: 'center' as const,
       render: (q: QuizQuestionBankRow) => (
-        <button
-          type="button"
-          onClick={() => setSelectedQuestion(q)}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 4,
-            padding: '4px 8px',
-            borderRadius: RADIUS.sm,
-            border: `1px solid ${tokens.border}`,
-            backgroundColor: tokens.surface,
-            color: tokens.primary,
-            fontSize: 12,
-            cursor: 'pointer',
-            fontWeight: 500,
-          }}
-        >
-          <Eye size={12} strokeWidth={2} /> View
-        </button>
+        <RowActionMenu
+          onView={() => setSelectedQuestion(q)}
+          onEdit={() => handleOpenEdit(q)}
+          onDelete={() => setDeleteConfirmQuestion(q)}
+        />
       ),
     },
   ];
@@ -322,6 +447,9 @@ export default function ContentQuizTabPage({ params }: QuizTabProps): React.Reac
         }}
       >
         {[
+          { key: 'quiz-1', label: 'Quiz 1' },
+          { key: 'quiz-2', label: 'Quiz 2' },
+          { key: 'quiz-3', label: 'Quiz 3' },
           { key: 'chapter-quizzes', label: 'Chapter Quizzes' },
           { key: 'course-quizzes', label: 'Course Checkpoints' },
           { key: 'practice', label: 'Practice Assessments' },
@@ -474,19 +602,19 @@ export default function ContentQuizTabPage({ params }: QuizTabProps): React.Reac
       {/* Bulk CSV Import Modal */}
       <BulkCsvImportModal
         isOpen={isCsvModalOpen}
-        targetExamSetOrQuizTitle="Quiz Question Bank"
+        targetExamSetOrQuizTitle={currentLabel}
+        targetType="QUIZ_CHAPTER"
+        availableCourses={courses.map((c) => ({ id: c.id, code: c.code, title: c.title }))}
+        sampleTemplateUrl="/samples/quizzes_sample.csv"
+        sampleCsvContent={`question_type,prompt_latex,option_a,option_b,option_c,option_d,correct_answer,explanation_latex
+MULTIPLE_CHOICE,"Which of the following data structures operates on a First-In, First-Out (FIFO) access policy?","Stack","Queue","Binary Search Tree","Max-Heap",B,"A Queue follows the FIFO principle where elements are enqueued at the rear and dequeued from the front."
+MULTIPLE_CHOICE,"What is the output of the logical expression $(P \\land \\neg P)$ for any boolean truth value of $P$?","Always True (Tautology)","Always False (Contradiction)","Contingent on $P$","Undefined",B,"The conjunction of a proposition and its negation is a logical contradiction and is false under all assignments."
+TRUE_FALSE,"In object-oriented programming, an interface can instantiate concrete objects directly without an implementing class.",True,False,,,FALSE,"Interfaces define contracts and cannot be directly instantiated without a concrete class implementation."
+MULTIPLE_CHOICE,"In communicative English, which grammatical voice places the receiver of the action in the subject position?","Active Voice","Passive Voice","Imperative Voice","Subjunctive Voice",B,"In passive voice (e.g., 'The report was written by John'), the recipient of the action functions as the grammatical subject."
+MULTIPLE_CHOICE,"Solve for $x$: $2^{x + 3} = 32$.","$2$","$3$","$5$","$8$",A,"Since $32 = 2^5$, equate exponents: $x + 3 = 5 \\implies x = 2$."`}
         onClose={() => setIsCsvModalOpen(false)}
-        onUploadCsv={async () => ({
-          valid: true,
-          totalRows: 25,
-          validRowsCount: 25,
-          errors: [],
-        })}
-        onCommitImport={async () => {
-          setIsCsvModalOpen(false);
-          await loadQuestionBank();
-          alert('Successfully imported quiz questions!');
-        }}
+        onUploadCsv={handleUploadCsv}
+        onCommitImport={handleCommitImport}
       />
 
       {/* Question Details Modal */}
@@ -590,6 +718,322 @@ export default function ContentQuizTabPage({ params }: QuizTabProps): React.Reac
                 }}
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Question Modal */}
+      {editingQuestion && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: 24,
+          }}
+          onClick={() => !isSavingEdit && setEditingQuestion(null)}
+        >
+          <div
+            style={{
+              backgroundColor: tokens.surface,
+              borderRadius: RADIUS.lg,
+              padding: SPACING.xl,
+              maxWidth: 640,
+              width: '100%',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: SPACING.md,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: SPACING.sm }}>
+                <div
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: RADIUS.md,
+                    backgroundColor: tokens.surfaceSubtle,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: tokens.primary,
+                  }}
+                >
+                  <Edit3 size={16} />
+                </div>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: tokens.textPrimary }}>
+                  Edit Question #{editingQuestion.displayNumber}
+                </h3>
+              </div>
+              <button
+                type="button"
+                disabled={isSavingEdit}
+                onClick={() => setEditingQuestion(null)}
+                style={{
+                  border: 'none',
+                  background: 'none',
+                  fontSize: 18,
+                  cursor: isSavingEdit ? 'not-allowed' : 'pointer',
+                  color: tokens.textMuted,
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Prompt LaTeX */}
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: tokens.textPrimary, marginBottom: 4 }}>
+                Question Prompt (LaTeX Supported)
+              </label>
+              <textarea
+                value={editPromptLatex}
+                onChange={(e) => setEditPromptLatex(e.target.value)}
+                rows={3}
+                style={{
+                  width: '100%',
+                  padding: SPACING.sm,
+                  borderRadius: RADIUS.md,
+                  border: `1px solid ${tokens.border}`,
+                  fontSize: 13,
+                  fontFamily: 'inherit',
+                  boxSizing: 'border-box',
+                  resize: 'vertical',
+                }}
+                placeholder="Enter question prompt..."
+              />
+            </div>
+
+            {/* Options */}
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: tokens.textPrimary, marginBottom: 6 }}>
+                Answer Options (select the radio button next to the correct answer)
+              </label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: SPACING.xs }}>
+                {editOptions.map((opt, idx) => {
+                  const optLetter = String.fromCharCode(65 + idx);
+                  const isCorrect = opt.id === editCorrectOptionId;
+                  return (
+                    <div
+                      key={opt.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: SPACING.sm,
+                        padding: '6px 10px',
+                        borderRadius: RADIUS.md,
+                        border: `1px solid ${isCorrect ? tokens.success : tokens.border}`,
+                        backgroundColor: isCorrect ? tokens.successBg : tokens.surface,
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        id={`opt_radio_${opt.id}`}
+                        name="correctOptionRadio"
+                        checked={isCorrect}
+                        onChange={() => setEditCorrectOptionId(opt.id)}
+                        style={{ cursor: 'pointer' }}
+                      />
+                      <label
+                        htmlFor={`opt_radio_${opt.id}`}
+                        style={{
+                          fontWeight: 700,
+                          fontSize: 12,
+                          color: isCorrect ? tokens.success : tokens.textPrimary,
+                          cursor: 'pointer',
+                          minWidth: 20,
+                        }}
+                      >
+                        {optLetter}.
+                      </label>
+                      <input
+                        type="text"
+                        value={opt.textLatex}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setEditOptions((prev) =>
+                            prev.map((o) => (o.id === opt.id ? { ...o, textLatex: val } : o))
+                          );
+                        }}
+                        style={{
+                          flex: 1,
+                          padding: '4px 8px',
+                          borderRadius: RADIUS.sm,
+                          border: `1px solid ${tokens.border}`,
+                          fontSize: 13,
+                          backgroundColor: tokens.surface,
+                        }}
+                        placeholder={`Option ${optLetter} text...`}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Explanation LaTeX */}
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: tokens.textPrimary, marginBottom: 4 }}>
+                Explanation & Solution (LaTeX Supported)
+              </label>
+              <textarea
+                value={editExplanationLatex}
+                onChange={(e) => setEditExplanationLatex(e.target.value)}
+                rows={3}
+                style={{
+                  width: '100%',
+                  padding: SPACING.sm,
+                  borderRadius: RADIUS.md,
+                  border: `1px solid ${tokens.border}`,
+                  fontSize: 13,
+                  fontFamily: 'inherit',
+                  boxSizing: 'border-box',
+                  resize: 'vertical',
+                }}
+                placeholder="Enter step-by-step solution / explanation..."
+              />
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: SPACING.sm, marginTop: SPACING.xs }}>
+              <button
+                type="button"
+                disabled={isSavingEdit}
+                onClick={() => setEditingQuestion(null)}
+                style={{
+                  padding: `${SPACING.sm}px ${SPACING.lg}px`,
+                  borderRadius: RADIUS.md,
+                  border: `1px solid ${tokens.border}`,
+                  backgroundColor: tokens.surface,
+                  color: tokens.textPrimary,
+                  fontWeight: 600,
+                  fontSize: 13,
+                  cursor: isSavingEdit ? 'not-allowed' : 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isSavingEdit}
+                onClick={handleSaveEdit}
+                style={{
+                  padding: `${SPACING.sm}px ${SPACING.lg}px`,
+                  borderRadius: RADIUS.md,
+                  border: 'none',
+                  backgroundColor: tokens.primary,
+                  color: tokens.surface,
+                  fontWeight: 600,
+                  fontSize: 13,
+                  cursor: isSavingEdit ? 'not-allowed' : 'pointer',
+                  opacity: isSavingEdit ? 0.7 : 1,
+                }}
+              >
+                {isSavingEdit ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Question Confirmation Modal */}
+      {deleteConfirmQuestion && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: 24,
+          }}
+          onClick={() => !isDeleting && setDeleteConfirmQuestion(null)}
+        >
+          <div
+            style={{
+              backgroundColor: tokens.surface,
+              borderRadius: RADIUS.lg,
+              padding: SPACING.xl,
+              maxWidth: 480,
+              width: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: SPACING.md,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: SPACING.sm }}>
+              <div
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: RADIUS.pill,
+                  backgroundColor: '#fee2e2',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#dc2626',
+                }}
+              >
+                <Trash2 size={18} />
+              </div>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: tokens.textPrimary }}>
+                Delete Question #{deleteConfirmQuestion.displayNumber}?
+              </h3>
+            </div>
+
+            <p style={{ margin: 0, fontSize: 13, color: tokens.textMuted, lineHeight: 1.5 }}>
+              Are you sure you want to delete question #{deleteConfirmQuestion.displayNumber} (&quot;
+              {deleteConfirmQuestion.promptLatex.slice(0, 80)}...&quot;)?
+              Subsequent questions in this set will be automatically renumbered to maintain a continuous 1..N order.
+            </p>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: SPACING.sm, marginTop: SPACING.sm }}>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setDeleteConfirmQuestion(null)}
+                style={{
+                  padding: `${SPACING.sm}px ${SPACING.lg}px`,
+                  borderRadius: RADIUS.md,
+                  border: `1px solid ${tokens.border}`,
+                  backgroundColor: tokens.surface,
+                  color: tokens.textPrimary,
+                  fontWeight: 600,
+                  fontSize: 13,
+                  cursor: isDeleting ? 'not-allowed' : 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => handleDeleteQuestion(deleteConfirmQuestion.id)}
+                style={{
+                  padding: `${SPACING.sm}px ${SPACING.lg}px`,
+                  borderRadius: RADIUS.md,
+                  border: 'none',
+                  backgroundColor: '#dc2626',
+                  color: '#ffffff',
+                  fontWeight: 600,
+                  fontSize: 13,
+                  cursor: isDeleting ? 'not-allowed' : 'pointer',
+                  opacity: isDeleting ? 0.7 : 1,
+                }}
+              >
+                {isDeleting ? 'Deleting...' : 'Delete Question'}
               </button>
             </div>
           </div>

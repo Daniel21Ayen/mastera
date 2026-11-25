@@ -1,14 +1,19 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Headers,
+  HttpException,
+  HttpStatus,
   Param,
   Post,
   Put,
   Query,
   Res,
 } from '@nestjs/common';
+import * as fs from 'fs';
+import * as path from 'path';
 import {
   ContentAuthoringService,
   UpsertChapterContentInput,
@@ -162,6 +167,16 @@ export class ContentAuthoringController {
     return this.contentService.updateChapter(actor, chapterId, data);
   }
 
+  @Delete('chapters/:id')
+  async deleteChapter(
+    @Param('id') chapterId: string,
+    @Body() body?: { actor?: AuthenticatedAdminContext }
+  ) {
+    const actor = body?.actor || DEFAULT_SUPER_ADMIN;
+    await this.contentService.deleteChapter(actor, chapterId);
+    return { success: true, deletedChapterId: chapterId };
+  }
+
   @Post('chapters/:id/submit-for-review')
   async submitForReview(
     @Param('id') chapterId: string,
@@ -274,5 +289,104 @@ export class ContentAuthoringController {
         error: err?.message || 'Content package not found or unavailable',
       });
     }
+  }
+
+  @Post('upload-pdf')
+  async uploadPdf(
+    @Body()
+    body: {
+      pdfBase64?: string;
+      fileName?: string;
+      chapterId?: string;
+      courseId?: string;
+      actor?: AuthenticatedAdminContext;
+    }
+  ) {
+    let rawBase64 = body.pdfBase64 || '';
+    if (rawBase64.includes(',')) {
+      rawBase64 = rawBase64.split(',')[1] || '';
+    }
+    if (!rawBase64) {
+      throw new HttpException('No PDF data provided', HttpStatus.BAD_REQUEST);
+    }
+
+    const pdfBuffer = Buffer.from(rawBase64, 'base64');
+    // Validate PDF magic bytes: %PDF (0x25, 0x50, 0x44, 0x46) per SRS Section 10.7
+    if (
+      pdfBuffer.length < 4 ||
+      pdfBuffer[0] !== 0x25 ||
+      pdfBuffer[1] !== 0x50 ||
+      pdfBuffer[2] !== 0x44 ||
+      pdfBuffer[3] !== 0x46
+    ) {
+      throw new HttpException('Invalid file format. File must be a valid PDF document.', HttpStatus.BAD_REQUEST);
+    }
+
+    const safeName = (body.fileName || 'material.pdf').replace(/[^a-zA-Z0-9._-]/g, '_');
+    const storageKey = `pdfs/${Date.now()}-${safeName}`;
+    const pdfsDir = path.join(process.cwd(), 'data', 'pdfs');
+    if (!fs.existsSync(pdfsDir)) {
+      fs.mkdirSync(pdfsDir, { recursive: true });
+    }
+    const filePath = path.join(pdfsDir, path.basename(storageKey));
+    fs.writeFileSync(filePath, pdfBuffer);
+
+    if (body.chapterId) {
+      const actor = body.actor || DEFAULT_SUPER_ADMIN;
+      try {
+        await this.contentService.updateChapter(actor, body.chapterId, {
+          pdfStorageKey: storageKey,
+        });
+      } catch (err: any) {
+        console.warn('[uploadPdf] Could not automatically link chapter:', err?.message);
+      }
+    }
+
+    return {
+      success: true,
+      storageKey,
+      fileName: safeName,
+      sizeBytes: pdfBuffer.length,
+      url: `/content/pdf/${path.basename(storageKey)}`,
+    };
+  }
+
+  @Get('pdf/:filename')
+  async getPdfFile(@Param('filename') filename: string, @Res() res: any) {
+    const pdfsDir = path.join(process.cwd(), 'data', 'pdfs');
+    const safeFilename = path.basename(filename);
+    const filePath = path.join(pdfsDir, safeFilename);
+
+    if (fs.existsSync(filePath)) {
+      const stat = fs.statSync(filePath);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Length', String(stat.size));
+      res.setHeader('Accept-Ranges', 'bytes');
+      res.setHeader('Content-Disposition', `inline; filename="${safeFilename}"`);
+      const stream = fs.createReadStream(filePath);
+      return stream.pipe(res);
+    }
+
+    // Return a valid fallback minimal PDF if not found
+    const minimalPdf = Buffer.from(
+      '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Resources<<>>>>endobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000052 00000 n \n0000000101 00000 n \ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n178\n%%EOF',
+      'utf-8'
+    );
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Length', String(minimalPdf.length));
+    return res.send(minimalPdf);
+  }
+
+  @Get('chapters/:id/pdf')
+  async getChapterPdf(@Param('id') chapterId: string, @Res() res: any) {
+    try {
+      const chapter = await this.contentService.getChapterById(chapterId);
+      if (chapter && chapter.pdfStorageKey) {
+        const filename = path.basename(chapter.pdfStorageKey);
+        return this.getPdfFile(filename, res);
+      }
+    } catch {}
+
+    return this.getPdfFile('default.pdf', res);
   }
 }

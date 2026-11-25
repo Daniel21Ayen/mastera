@@ -121,6 +121,10 @@ export class CsvQuestionImportService {
       examSetId?: string | null;
       quizChapterId?: string | null;
       courseId?: string | null;
+      category?: string | null;
+      universityId?: string | null;
+      programId?: string | null;
+      year?: string | null;
     },
     dryRun: boolean
   ): Promise<{
@@ -232,7 +236,12 @@ export class CsvQuestionImportService {
             message: 'Multiple choice requires at least option_a and option_b.',
           });
         }
-        const upperCorrect = correctAnswer.toUpperCase();
+        let upperCorrect = correctAnswer.toUpperCase().trim();
+        if (upperCorrect === '1') upperCorrect = 'A';
+        else if (upperCorrect === '2') upperCorrect = 'B';
+        else if (upperCorrect === '3') upperCorrect = 'C';
+        else if (upperCorrect === '4') upperCorrect = 'D';
+
         if (!['A', 'B', 'C', 'D'].includes(upperCorrect)) {
           errors.push({
             rowNumber,
@@ -250,6 +259,10 @@ export class CsvQuestionImportService {
           examSetId: target.examSetId,
           quizChapterId: target.quizChapterId,
           courseId: target.courseId,
+          category: (target.category as any) ?? undefined,
+          universityId: target.universityId ?? undefined,
+          programId: target.programId ?? undefined,
+          year: target.year ?? undefined,
           questionType,
           promptLatex,
           options,
@@ -257,8 +270,13 @@ export class CsvQuestionImportService {
           explanationLatex,
         });
       } else if (questionType === 'TRUE_FALSE') {
-        const lower = correctAnswer.toLowerCase();
-        if (lower !== 'true' && lower !== 'false') {
+        const lower = correctAnswer.toLowerCase().trim();
+        let correctBoolean: boolean | null = null;
+        if (['true', 't', '1', 'a', 'yes', 'correct'].includes(lower)) {
+          correctBoolean = true;
+        } else if (['false', 'f', '0', 'b', 'no', 'incorrect'].includes(lower)) {
+          correctBoolean = false;
+        } else {
           errors.push({
             rowNumber,
             column: 'correct_answer',
@@ -269,9 +287,13 @@ export class CsvQuestionImportService {
           examSetId: target.examSetId,
           quizChapterId: target.quizChapterId,
           courseId: target.courseId,
+          category: (target.category as any) ?? undefined,
+          universityId: target.universityId ?? undefined,
+          programId: target.programId ?? undefined,
+          year: target.year ?? undefined,
           questionType,
           promptLatex,
-          correctBoolean: lower === 'true',
+          correctBoolean: correctBoolean ?? false,
           explanationLatex,
         });
       } else {
@@ -291,6 +313,10 @@ export class CsvQuestionImportService {
           examSetId: target.examSetId,
           quizChapterId: target.quizChapterId,
           courseId: target.courseId,
+          category: (target.category as any) ?? undefined,
+          universityId: target.universityId ?? undefined,
+          programId: target.programId ?? undefined,
+          year: target.year ?? undefined,
           questionType,
           promptLatex,
           acceptedAnswers,

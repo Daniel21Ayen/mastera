@@ -53,7 +53,13 @@ import { DomainExceptionFilter } from './common/filters/domain-exception.filter'
 async function bootstrap() {
   const envConfig = validateEnvironmentOrExit(process.env);
 
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    bodyParser: false,
+  });
+
+  const express = require('express');
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
   app.useGlobalFilters(new DomainExceptionFilter());
 
