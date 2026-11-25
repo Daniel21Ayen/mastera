@@ -163,16 +163,17 @@ export default function App(): any {
   }, []);
 
   // Reusable loader for live student summary from database (Phase 2)
-  const loadStudentSummary = React.useCallback(async () => {
+  const syncStudentSummary = React.useCallback(async () => {
     try {
       const candidateHosts = getCandidateHosts();
       for (const host of candidateHosts) {
         try {
           const controller = new AbortController();
           const timer = setTimeout(() => controller.abort(), 2000);
-          const url =
-            `${host}/student/me/summary` +
-            (studentCode ? `?studentCode=${studentCode}` : '');
+          const params = new URLSearchParams();
+          if (studentCode) params.set('studentCode', studentCode);
+          if (studentPhone) params.set('identifier', studentPhone);
+          const url = `${host}/student/me/summary?${params.toString()}`;
           const res = await fetch(url, { signal: controller.signal });
           clearTimeout(timer);
           if (res.ok) {
@@ -193,9 +194,12 @@ export default function App(): any {
                 setStreakDays((summary as any).streakDays);
               if ((summary as any).quizzesPassedCount !== undefined)
                 setQuizzesPassedCount((summary as any).quizzesPassedCount);
-              if (summary.accountState === 'CLAIMED_REGISTERED') {
+              if (summary.accountState === 'CLAIMED_REGISTERED' || (summary.bundleDaysRemaining && summary.bundleDaysRemaining > 0)) {
                 setAccountState('REGISTERED_REMOTE');
                 setHasActiveBundle(true);
+              }
+              if (Array.isArray(summary.activeCourseIds) && summary.activeCourseIds.length > 0) {
+                setSelectedCourseIds(summary.activeCourseIds);
               }
             }
             break;
@@ -203,7 +207,15 @@ export default function App(): any {
         } catch {}
       }
     } catch {}
-  }, [studentCode]);
+  }, [studentCode, studentPhone]);
+
+  const loadStudentSummary = syncStudentSummary;
+
+  useEffect(() => {
+    syncStudentSummary();
+    const interval = setInterval(syncStudentSummary, 4000);
+    return () => clearInterval(interval);
+  }, [syncStudentSummary]);
 
   // Continuous live database synchronization:
   // Dynamically syncs universities, programs, courses, chapters, exams, pricing, and payment methods from PostgreSQL

@@ -20,6 +20,8 @@ import {
   BookOpen,
   Landmark,
   Building2,
+  BarChart3,
+  Shield,
 } from 'lucide-react';
 import { AdminRole } from '@mastera/contracts';
 import {
