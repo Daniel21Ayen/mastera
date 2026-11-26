@@ -449,6 +449,7 @@ export class PrismaSnapshotDataSource implements SnapshotDataSourcePort {
       isFree: ch.isFree,
       timeAllowedMinutes: ch.timeAllowedMinutes,
       estimatedSizeBytes: ch.estimatedSizeBytes,
+      pdfStorageKey: ch.pdfStorageKey,
       status: ch.status as any,
       version: ch.version,
     }));

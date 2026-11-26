@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import {
   CatalogChapterMetaDto,
-  ContentStatus,
   MaterialType,
   QuizTarget,
 } from '@mastera/contracts';
@@ -10,6 +9,7 @@ import {
   AuthenticatedAdminContext,
   ScopeAuthorizationService,
 } from '../permissions/scope.service';
+import { S3StorageService } from '../../infrastructure/storage/s3.service';
 
 export interface ChapterContentRecord extends CatalogChapterMetaDto {
   bodyMarkdownLatex: string;
@@ -43,6 +43,7 @@ export interface UpsertChapterContentInput {
   title: string;
   bodyMarkdownLatex: string;
   pdfStorageKey?: string | null | undefined;
+  pdfDataBase64?: string | null | undefined;
   isFree?: boolean | undefined;
   timeAllowedMinutes?: number | null | undefined; // Optional for quizzes (DR-05, Q13)
 }
@@ -84,8 +85,24 @@ export class ContentAuthoringService {
   constructor(
     private readonly repo: ContentRepositoryPort,
     private readonly scopeAuth: ScopeAuthorizationService,
-    private readonly auditService: AuditService
+    private readonly auditService: AuditService,
+    private readonly s3Storage?: S3StorageService
   ) {}
+
+  private async resolvePdfStorageKey(
+    input: UpsertChapterContentInput
+  ): Promise<string | null | undefined> {
+    if (!input.pdfDataBase64) return input.pdfStorageKey;
+    if (!this.s3Storage) throw new Error('PDF storage is unavailable.');
+    const raw = input.pdfDataBase64.replace(/^data:application\/pdf;base64,/, '');
+    const buffer = Buffer.from(raw, 'base64');
+    if (buffer.subarray(0, 4).toString('ascii') !== '%PDF') {
+      throw new Error('PDF_INVALID: uploaded content is not a valid PDF.');
+    }
+    const key = input.pdfStorageKey || `uploads/pdf/${Date.now()}-${Math.random().toString(36).slice(2, 10)}.pdf`;
+    await this.s3Storage.uploadPackageBuffer(key, buffer, 'application/pdf');
+    return key;
+  }
 
   async listBookGroups(filter?: {
     courseId?: string;
@@ -165,6 +182,7 @@ export class ContentAuthoringService {
     }
 
     const bodyBytes = Buffer.byteLength(input.bodyMarkdownLatex, 'utf8');
+    const pdfStorageKey = await this.resolvePdfStorageKey(input);
     const created = await this.repo.createChapter({
       courseId: input.courseId,
       bookGroupId: input.bookGroupId ?? '',
@@ -172,7 +190,7 @@ export class ContentAuthoringService {
       orderIndex: input.orderIndex,
       title: input.title.trim(),
       bodyMarkdownLatex: input.bodyMarkdownLatex,
-      pdfStorageKey: input.pdfStorageKey ?? null,
+      pdfStorageKey: pdfStorageKey ?? null,
       isFree: input.isFree ?? false,
       timeAllowedMinutes: input.timeAllowedMinutes ?? null,
       estimatedSizeBytes: bodyBytes,
@@ -224,7 +242,13 @@ export class ContentAuthoringService {
       updateData.bodyMarkdownLatex = patch.bodyMarkdownLatex;
       updateData.estimatedSizeBytes = Buffer.byteLength(patch.bodyMarkdownLatex, 'utf8');
     }
-    if (patch.pdfStorageKey !== undefined) updateData.pdfStorageKey = patch.pdfStorageKey;
+    if (patch.pdfStorageKey !== undefined || patch.pdfDataBase64) {
+      const pdfStorageKey = await this.resolvePdfStorageKey({
+        ...existing,
+        ...patch,
+      } as UpsertChapterContentInput);
+      if (pdfStorageKey !== undefined) updateData.pdfStorageKey = pdfStorageKey;
+    }
     if (patch.isFree !== undefined) updateData.isFree = patch.isFree;
 
     const updated = await this.repo.updateChapter(chapterId, updateData);

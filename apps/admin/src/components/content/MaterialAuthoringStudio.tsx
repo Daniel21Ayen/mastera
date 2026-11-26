@@ -23,6 +23,7 @@ export interface MaterialStudioChapterDraft {
   title: string;
   bodyMarkdownLatex: string;
   pdfStorageKey?: string | null;
+  pdfDataBase64?: string | null;
   isFreeTrial: boolean;
   status?: string;
 }
@@ -147,6 +148,7 @@ export function MaterialAuthoringStudio({
       title: 'Chapter 1',
       bodyMarkdownLatex: '',
       pdfStorageKey: null,
+      pdfDataBase64: null,
       isFreeTrial: false,
     };
 
@@ -174,15 +176,19 @@ export function MaterialAuthoringStudio({
     setSelectedChapterId(newDraft.id);
   };
 
-  const handlePdfFileSelect = (file: File) => {
+  const handlePdfFileSelect = async (file: File) => {
     if (!file) return;
     if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
       alert('Please select a valid PDF file.');
       return;
     }
     const storageKey = `uploads/pdf/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let binary = '';
+    for (const byte of bytes) binary += String.fromCharCode(byte);
     updateCurrentChapter({
       pdfStorageKey: storageKey,
+      pdfDataBase64: btoa(binary),
     });
   };
 
@@ -261,7 +267,7 @@ export function MaterialAuthoringStudio({
           <button
             type="button"
             onClick={() =>
-              updateCurrentChapter({ title: '', bodyMarkdownLatex: '', pdfStorageKey: null })
+              updateCurrentChapter({ title: '', bodyMarkdownLatex: '', pdfStorageKey: null, pdfDataBase64: null })
             }
             style={{
               padding: `${SPACING.sm}px ${SPACING.lg}px`,
@@ -617,7 +623,7 @@ export function MaterialAuthoringStudio({
               </div>
               <button
                 type="button"
-                onClick={() => updateCurrentChapter({ pdfStorageKey: null })}
+                onClick={() => updateCurrentChapter({ pdfStorageKey: null, pdfDataBase64: null })}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',

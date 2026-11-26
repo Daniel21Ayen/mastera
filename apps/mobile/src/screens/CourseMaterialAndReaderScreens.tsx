@@ -5,6 +5,7 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
+  Linking,
 } from 'react-native';
 import {
   CatalogBookGroupDto,
@@ -20,6 +21,7 @@ import {
 import { ResolvedCatalogRowView } from '../core/database/local-catalog-store';
 import { MasteraIcon } from '../shared/components/MasteraIcon';
 import { LockedContentModal } from '../shared/components/LockedContentModal';
+import { getCandidateHosts } from '../core/data/live-catalog-provider';
 
 export interface CourseMaterialAndReaderScreensProps {
   courseTitle: string;
@@ -37,6 +39,7 @@ export interface CourseMaterialAndReaderScreensProps {
       bodyText: string;
       formulaLatex: string;
       keyIdeaSummary: string;
+      pdfStorageKey?: string | null;
     }
   >;
   isCourseDownloaded?: boolean;
@@ -52,6 +55,8 @@ export interface CourseMaterialAndReaderScreensProps {
   onBackToCourses?: () => void;
   onNavigateToStore?: () => void;
   onOpenDownloadsManager?: () => void;
+  onOpenChapterPdf?: (storageKey: string, chapter: CatalogChapterMetaDto) => void;
+  pdfBaseUrl?: string;
   themeMode?: ThemeMode;
 }
 
@@ -76,6 +81,8 @@ export function CourseMaterialAndReaderScreens({
   onBackToCourses,
   onNavigateToStore,
   onOpenDownloadsManager,
+  onOpenChapterPdf,
+  pdfBaseUrl,
   themeMode = 'light',
 }: CourseMaterialAndReaderScreensProps): React.ReactElement {
   const [activeCategory, setActiveCategory] = useState<'MODULES' | 'NOTES' | 'AMHARIC_NOTE'>('MODULES');
@@ -154,6 +161,7 @@ export function CourseMaterialAndReaderScreens({
       formulaLatex: "f'(x) = \\lim_{h \\to 0} \\frac{f(x+h) - f(x)}{h}",
       keyIdeaSummary:
         'Key idea: a derivative measures how fast a value changes at a point.',
+      pdfStorageKey: null,
     };
 
     return (
@@ -196,6 +204,25 @@ export function CourseMaterialAndReaderScreens({
           <Text style={[styles.readerBody, { color: tokens.textPrimary }]}>
             {contentBody.bodyText}
           </Text>
+
+          {contentBody.pdfStorageKey && (
+            <TouchableOpacity
+              onPress={() => {
+                if (onOpenChapterPdf) {
+                  onOpenChapterPdf(contentBody.pdfStorageKey!, activeChapter);
+                  return;
+                }
+                const url = contentBody.pdfStorageKey!.startsWith('http')
+                  ? contentBody.pdfStorageKey!
+                  : `${pdfBaseUrl || getCandidateHosts()[0] || ''}/content/pdf?key=${encodeURIComponent(contentBody.pdfStorageKey!)}`;
+                if (url.startsWith('http')) void Linking.openURL(url);
+              }}
+              style={[styles.pdfButton, { backgroundColor: tokens.primarySoft, borderColor: tokens.primary }]}
+            >
+              <MasteraIcon name="book-open" size={18} color={tokens.primary} />
+              <Text style={[styles.pdfButtonText, { color: tokens.primary }]}>Open attached PDF</Text>
+            </TouchableOpacity>
+          )}
 
           {/* Math / Formula Box */}
           <View style={[styles.formulaBox, { backgroundColor: tokens.surface, borderColor: tokens.border }]}>
@@ -1049,6 +1076,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 22,
     marginBottom: 16,
+  },
+  pdfButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    marginBottom: 16,
+  },
+  pdfButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
   },
   formulaBox: {
     padding: 16,

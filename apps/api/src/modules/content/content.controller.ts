@@ -15,6 +15,7 @@ import {
 } from './content.service';
 import { ContentPackageBuilderService } from './content-package-builder.service';
 import { AuthenticatedAdminContext } from '../permissions/scope.service';
+import { S3StorageService } from '../../infrastructure/storage/s3.service';
 
 interface HttpResponseAdapter {
   status(code: number): HttpResponseAdapter;
@@ -35,8 +36,25 @@ const DEFAULT_SUPER_ADMIN: AuthenticatedAdminContext = {
 export class ContentAuthoringController {
   constructor(
     private readonly contentService: ContentAuthoringService,
-    private readonly packageBuilder: ContentPackageBuilderService
+    private readonly packageBuilder: ContentPackageBuilderService,
+    private readonly s3Storage: S3StorageService
   ) {}
+
+  @Get('pdf')
+  async streamPdf(@Query('key') key: string, @Res() res: HttpResponseAdapter) {
+    if (!key || (!key.startsWith('uploads/pdf/') && !key.startsWith('pdfs/'))) {
+      return res.status(400).json({ error: 'Invalid PDF key' });
+    }
+    try {
+      const { stream, contentLength } = await this.s3Storage.getObjectStream(key);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'inline');
+      if (contentLength !== undefined) res.setHeader('Content-Length', String(contentLength));
+      return (stream as any).pipe(res as any);
+    } catch {
+      return res.status(404).json({ error: 'PDF not found' });
+    }
+  }
 
   @Get('book-groups')
   async listBookGroups(

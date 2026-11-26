@@ -72,6 +72,7 @@ export interface CatalogChapterMetaDto {
   questionCount?: number;
   timeAllowedMinutes?: number | null; // DR-05, Q13: optional for quizzes
   estimatedSizeBytes: number;
+  pdfStorageKey?: string | null;
   version: number;
   status: ContentStatus;
 }
@@ -82,7 +83,7 @@ export interface CatalogExamSetMetaDto {
   category: ExamCategory;
   universityId: string | null;
   programId: string | null;
-  courseId: string | null; // null for standalone COC sets
+  courseId: string | null; // COC may aggregate questions across courses
   semester: 1 | 2 | null;
   stream: AcademicStream | null;
   year: string;

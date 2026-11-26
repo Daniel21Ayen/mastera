@@ -274,7 +274,6 @@ export function HomeDashboardScreens({
   // Top: "Hello, Abebe" + subtitle + Bell & Avatar badges
   // Hero: Royal Blue "Continue Learning" with translucent Play ▶ button + 60% progress bar
   // Stats: 3 white cards ("My Courses", "Learning Stats", "Store Status") with light-blue square badges
-  // COC Exam: Pastel green card with green "C" badge, title, subtitle & chevron >
   // Recently Accessed: "Recently Accessed" + "See all", 3 cards (Calculus I, Grammar, AASTU Mid Exam)
   return (
     <ScrollView
@@ -628,47 +627,6 @@ const styles = StyleSheet.create({
   statCardSubtitle: {
     fontSize: 11,
     fontWeight: '400',
-  },
-  cocCard: {
-    borderRadius: 14,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-  },
-  cocLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    marginRight: 10,
-  },
-  cocSquareBadge: {
-    width: 34,
-    height: 34,
-    borderRadius: 8,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  cocSquareLetter: {
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  cocTextGroup: {
-    flex: 1,
-  },
-  cocTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  cocSubtitle: {
-    fontSize: 12,
-    fontWeight: '500',
-    marginTop: 2,
   },
   recentSection: {
     marginTop: 4,
