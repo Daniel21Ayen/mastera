@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 
-export const STUDENT_MS_COUNTER_KEY = 'student_ms_code';
+export const STUDENT_MS_COUNTER_KEY = 'student_code';
 
 /**
  * Minimal transactional interface compatible with Prisma.TransactionClient
@@ -36,15 +36,32 @@ export class CounterService {
     tx: CounterTransactionExecutor,
     counterKey: string
   ): Promise<number> {
-    const rows = await tx.$queryRaw<Array<{ value: number }>>`
-      INSERT INTO counters ("key", "value", "updated_at")
-      VALUES (${counterKey}, 1, NOW())
-      ON CONFLICT ("key")
-      DO UPDATE SET
-        "value" = counters."value" + 1,
-        "updated_at" = NOW()
-      RETURNING "value";
-    `;
+    const isStudentKey = counterKey.includes('student');
+    const rows = isStudentKey
+      ? await tx.$queryRaw<Array<{ value: number }>>`
+          INSERT INTO counters ("key", "value", "updated_at")
+          VALUES (${counterKey}, (
+            SELECT COALESCE(MAX(NULLIF(regexp_replace(student_code, '^MS', ''), '')::integer), 0) + 1
+            FROM student
+          ), NOW())
+          ON CONFLICT ("key")
+          DO UPDATE SET
+            "value" = GREATEST(
+              counters."value" + 1,
+              (SELECT COALESCE(MAX(NULLIF(regexp_replace(student_code, '^MS', ''), '')::integer), 0) + 1 FROM student)
+            ),
+            "updated_at" = NOW()
+          RETURNING "value";
+        `
+      : await tx.$queryRaw<Array<{ value: number }>>`
+          INSERT INTO counters ("key", "value", "updated_at")
+          VALUES (${counterKey}, 1, NOW())
+          ON CONFLICT ("key")
+          DO UPDATE SET
+            "value" = counters."value" + 1,
+            "updated_at" = NOW()
+          RETURNING "value";
+        `;
 
     const firstRow = rows[0];
     if (!firstRow || typeof firstRow.value !== 'number') {

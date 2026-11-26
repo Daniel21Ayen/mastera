@@ -832,11 +832,11 @@ A source must also exist (online stream or downloaded copy). A free item never c
 
   * Secondary pill sub-tabs depend on the selected primary tab:
 
-    * Under `Material`: `Modules` | `Notes` | `Amharic` (`DR-08`).
+    * Under `Material`: `Modules` | `Notes` | `Amharic Notes` (`DR-08`).
 
     * Under `Tests`: `Quiz 1` | `Quiz 2` | `Quiz 3`.
 
-    * Under `Exams`: `Mid` | `Final` | `Mock`.
+    * Under `Exams`: `Mid` | `Final` | `Mock`, `COC`.
 
 ### 9.6 Material Flow: Modules, Notes and Amharic (`D8`, `D11`)
 
@@ -874,11 +874,11 @@ All three Material sub-tabs (`Modules`, `Notes`, `Amharic`) follow a consistent 
 
 1. **Step 1 — Quiz Books List (`1 · Quiz 1/2/3 list`):**
 
-   * Lists quiz books/collections for the selected quiz tab (e.g., `Q1 Quiz Book A — 4 chapters` with `Open` badge, `Q1 Quiz Book B — 3 chapters` with `Open`, `Q1 Quiz Book C — 3 chapters` with `Locked`).
+   * Lists quiz for the selected quiz tab (e.g., `chapters 1` with `Open` badge, ` chapters 2` with `Open`, ` chapters 3` with `Locked`).
 
 2. **Step 2 — Quiz Chapters List (`2 · Quiz 1/2/3 chapters`):**
 
-   * Lists chapters inside the selected quiz book (`1 Parts of Speech`, `2 Sentence Structure`, `3 Problem Solving`, `4 Advanced Review`).
+   * Lists chapters inside the selected quiz course (`1 Parts of Speech`, `2 Sentence Structure`, `3 Problem Solving`, `4 Advanced Review`).
 
    * Subtitle shows question count and optional duration (`12 questions · 10 min` when `Time Allowed` is configured on the set, or `10 questions` only when untimed per `DR-05` / `Q13`).
 

@@ -285,7 +285,10 @@ export default function CoursesCatalogPage(): React.ReactElement {
             type="text"
             placeholder="Search courses by code or title..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setCurrentPage(1);
+            }}
             style={{
               border: 'none',
               background: 'transparent',
@@ -301,7 +304,10 @@ export default function CoursesCatalogPage(): React.ReactElement {
           <Filter size={16} strokeWidth={2} color={tokens.textMuted} />
           <select
             value={selectedStream}
-            onChange={(e) => setSelectedStream(e.target.value)}
+            onChange={(e) => {
+              setSelectedStream(e.target.value);
+              setCurrentPage(1);
+            }}
             style={{
               padding: `${SPACING.xs}px ${SPACING.sm}px`,
               borderRadius: RADIUS.md,
@@ -320,7 +326,10 @@ export default function CoursesCatalogPage(): React.ReactElement {
 
         <select
           value={selectedSemester}
-          onChange={(e) => setSelectedSemester(e.target.value)}
+          onChange={(e) => {
+            setSelectedSemester(e.target.value);
+            setCurrentPage(1);
+          }}
           style={{
             padding: `${SPACING.xs}px ${SPACING.sm}px`,
             borderRadius: RADIUS.md,

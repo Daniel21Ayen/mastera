@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import {
   ThemeMode,
 } from '@mastera/ui-tokens';
 import { MasteraIcon } from '../shared/components/MasteraIcon';
+import { getCandidateHosts } from '../core/data/live-catalog-provider';
 
 export type HomeAdaptiveStage =
   | 'SYNCED_ACTIVE'
@@ -107,6 +108,43 @@ export function HomeDashboardScreens({
 }: HomeDashboardScreensProps): React.ReactElement {
   const [subScreen, setSubScreen] = useState<'HOME' | 'PAYMENT_ALERTS' | 'STORE_STATUS'>('HOME');
   const [alertsTab, setAlertsTab] = useState<'ALL' | 'ORDERS' | 'EXPIRY'>('ALL');
+  const [announcements, setAnnouncements] = useState<
+    Array<{ id: string; title: string; message: string; priority: string }>
+  >([]);
+  const [dismissedAnnouncementIds, setDismissedAnnouncementIds] = useState<Set<string>>(
+    new Set()
+  );
+
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchBroadcastAnnouncements() {
+      const hosts = getCandidateHosts();
+      for (const host of hosts) {
+        try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 1800);
+          const res = await fetch(`${host}/announcements`, {
+            signal: controller.signal,
+            headers: { Accept: 'application/json' },
+          });
+          clearTimeout(timer);
+          if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data) && isMounted) {
+              setAnnouncements(data.filter((item: any) => item.isActive !== false));
+              break;
+            }
+          }
+        } catch {
+          // Continue to next host fallback
+        }
+      }
+    }
+    fetchBroadcastAnnouncements();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const tokens = STUDENT_THEMES[themeMode];
 
@@ -271,8 +309,8 @@ export function HomeDashboardScreens({
   }
 
   // Main Home Dashboard matching user's exact uploaded design:
-  // Top: "Hello, Abebe" + subtitle + Bell & Avatar badges
-  // Hero: Royal Blue "Continue Learning" with translucent Play ▶ button + 60% progress bar
+  // Top: "Hello, {Student}" + subtitle + Bell & Avatar badges
+  // Hero: Royal Blue "Continue Learning" with translucent Play ▶ button + progress bar
   // Stats: 3 white cards ("My Courses", "Learning Stats", "Store Status") with light-blue square badges
   // Recently Accessed: "Recently Accessed" + "See all", 3 cards (Calculus I, Grammar, AASTU Mid Exam)
   return (
@@ -313,11 +351,96 @@ export function HomeDashboardScreens({
               activeOpacity={0.8}
             >
               <Text style={[styles.avatarInitial, { color: tokens.white }]}>
-                {studentFirstName ? studentFirstName.charAt(0).toUpperCase() : 'A'}
+                {studentFirstName ? studentFirstName.charAt(0).toUpperCase() : 'S'}
               </Text>
             </TouchableOpacity>
         </View>
       </View>
+
+      {/* Broadcast Announcements Banner from Admin */}
+      {announcements
+        .filter((a) => !dismissedAnnouncementIds.has(a.id))
+        .slice(0, 1)
+        .map((ann) => (
+          <View
+            key={ann.id}
+            style={{
+              marginHorizontal: SPACING.lg,
+              marginBottom: SPACING.md,
+              padding: SPACING.md,
+              backgroundColor:
+                ann.priority === 'CRITICAL' ? tokens.dangerSoft : tokens.primarySoft,
+              borderRadius: RADIUS.lg,
+              borderWidth: 1,
+              borderColor:
+                ann.priority === 'CRITICAL' ? tokens.danger : tokens.primary,
+            }}
+          >
+            <View
+              style={{
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 4,
+              }}
+            >
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 6,
+                  flex: 1,
+                }}
+              >
+                <MasteraIcon
+                  name="bell"
+                  size={16}
+                  color={
+                    ann.priority === 'CRITICAL' ? tokens.danger : tokens.primary
+                  }
+                />
+                <Text
+                  style={{
+                    fontSize: 13,
+                    fontWeight: '700',
+                    color: tokens.textPrimary,
+                    flex: 1,
+                  }}
+                  numberOfLines={1}
+                >
+                  {ann.title}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() =>
+                  setDismissedAnnouncementIds((prev) => new Set([...prev, ann.id]))
+                }
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text
+                  style={{
+                    fontSize: 16,
+                    color: tokens.textMuted,
+                    fontWeight: '700',
+                    paddingHorizontal: 4,
+                  }}
+                >
+                  ×
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <Text
+              style={{
+                fontSize: 12,
+                color: tokens.textMuted,
+                lineHeight: 17,
+              }}
+              numberOfLines={3}
+            >
+              {ann.message}
+            </Text>
+          </View>
+        ))}
 
       {/* 2. Hero Card: Royal Blue "Continue Learning" with Progress Bar */}
       <TouchableOpacity

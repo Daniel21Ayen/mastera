@@ -43,6 +43,7 @@ export interface CourseMaterialAndReaderScreensProps {
     }
   >;
   isCourseDownloaded?: boolean;
+  hasActiveAccess?: boolean;
   downloadedChapterIds?: string[];
   onDownloadCourse: () => void;
   onDeleteCourseDownload?: () => void;
@@ -69,6 +70,7 @@ export function CourseMaterialAndReaderScreens({
   chaptersByBookId,
   chapterBodyByChapterId,
   isCourseDownloaded = false,
+  hasActiveAccess = false,
   downloadedChapterIds = ['ch-1', 'ch-2'],
   onDownloadCourse,
   onDeleteCourseDownload,
@@ -88,6 +90,9 @@ export function CourseMaterialAndReaderScreens({
   const [activeCategory, setActiveCategory] = useState<'MODULES' | 'NOTES' | 'AMHARIC_NOTE'>('MODULES');
   const [selectedBook, setSelectedBook] = useState<CatalogBookGroupDto | null>(null);
   const [activeChapter, setActiveChapter] = useState<CatalogChapterMetaDto | null>(null);
+  const [readerViewMode, setReaderViewMode] = useState<'NOTES' | 'PDF'>('NOTES');
+  const [pdfZoom, setPdfZoom] = useState<number>(100);
+  const [pdfCurrentPage, setPdfCurrentPage] = useState<number>(1);
   const [localCourseDownloaded, setLocalCourseDownloaded] = useState<boolean>(
     !!isCourseDownloaded
   );
@@ -164,6 +169,17 @@ export function CourseMaterialAndReaderScreens({
       pdfStorageKey: null,
     };
 
+    const hasPdf = Boolean(
+      (activeChapter as any).pdfStorageKey ||
+      (activeChapter as any).item?.pdfStorageKey ||
+      (contentBody as any).pdfStorageKey
+    );
+    const pdfFileName = (
+      (activeChapter as any).pdfStorageKey ||
+      (contentBody as any).pdfStorageKey ||
+      `${activeChapter.title.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`
+    ).split('/').pop() || 'Curriculum_Material.pdf';
+
     return (
       <View style={[styles.container, { backgroundColor: tokens.background }]}>
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -183,10 +199,64 @@ export function CourseMaterialAndReaderScreens({
               </Text>
             </TouchableOpacity>
 
-            <View style={[styles.downloadedChip, { backgroundColor: tokens.primarySoft }]}>
-              <Text style={[styles.downloadedChipText, { color: tokens.primary }]}>
-                Downloaded
-              </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              {/* PDF vs Notes View Mode Toggle */}
+              <View
+                style={{
+                  flexDirection: 'row',
+                  borderRadius: RADIUS.pill,
+                  backgroundColor: tokens.surface,
+                  borderWidth: 1,
+                  borderColor: tokens.border,
+                  overflow: 'hidden',
+                }}
+              >
+                <TouchableOpacity
+                  onPress={() => setReaderViewMode('NOTES')}
+                  style={{
+                    paddingVertical: 5,
+                    paddingHorizontal: 10,
+                    backgroundColor: readerViewMode === 'NOTES' ? tokens.primary : 'transparent',
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text
+                    style={{
+                      fontSize: 11,
+                      fontWeight: '700',
+                      color: readerViewMode === 'NOTES' ? tokens.white : tokens.textMuted,
+                    }}
+                  >
+                    Notes
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => setReaderViewMode('PDF')}
+                  style={{
+                    paddingVertical: 5,
+                    paddingHorizontal: 10,
+                    backgroundColor: readerViewMode === 'PDF' ? tokens.primary : 'transparent',
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text
+                    style={{
+                      fontSize: 11,
+                      fontWeight: '700',
+                      color: readerViewMode === 'PDF' ? tokens.white : tokens.textMuted,
+                    }}
+                  >
+                    PDF
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={[styles.downloadedChip, { backgroundColor: tokens.primarySoft }]}>
+                <Text style={[styles.downloadedChipText, { color: tokens.primary }]}>
+                  {downloadedChapters.has(activeChapter.id) ? 'Saved' : 'Online'}
+                </Text>
+              </View>
             </View>
           </View>
 
@@ -200,10 +270,45 @@ export function CourseMaterialAndReaderScreens({
             {activeChapter.title}
           </Text>
 
-          {/* Body Text */}
-          <Text style={[styles.readerBody, { color: tokens.textPrimary }]}>
-            {contentBody.bodyText}
-          </Text>
+          {readerViewMode === 'PDF' ? (
+            /* ============================================================== */
+            /* IN-APP PDF VIEWER CANVAS                                       */
+            /* ============================================================== */
+            <View style={{ marginTop: SPACING.sm }}>
+              {/* PDF Header Card */}
+              <View
+                style={{
+                  backgroundColor: tokens.surface,
+                  borderRadius: RADIUS.lg,
+                  borderWidth: 1,
+                  borderColor: tokens.border,
+                  padding: SPACING.md,
+                  marginBottom: SPACING.md,
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+                    <View
+                      style={{
+                        width: 38,
+                        height: 38,
+                        borderRadius: RADIUS.md,
+                        backgroundColor: tokens.dangerSoft,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <MasteraIcon name="info" size={20} color={tokens.danger} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 14, fontWeight: '700', color: tokens.textPrimary }} numberOfLines={1}>
+                        {pdfFileName}
+                      </Text>
+                      <Text style={{ fontSize: 11, color: tokens.textMuted }}>
+                        {activeCategory.replace(/_/g, ' ')} · Verified University Document
+                      </Text>
+                    </View>
+                  </View>
 
           {contentBody.pdfStorageKey && (
             <TouchableOpacity
@@ -231,18 +336,252 @@ export function CourseMaterialAndReaderScreens({
             </Text>
           </View>
 
-          {/* Callout Summary Box */}
-          <View style={[styles.calloutBox, { backgroundColor: tokens.amberSoft, borderColor: tokens.amber }]}>
-            <View style={styles.calloutHeaderRow}>
-              <MasteraIcon name="lightbulb" size={16} color={tokens.amber} />
-              <Text style={[styles.calloutTitle, { color: tokens.textPrimary }]}>
-                Key Idea
-              </Text>
+                {/* PDF Reader Toolbar: Zoom & Page Controls */}
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginTop: SPACING.md,
+                    paddingTop: SPACING.sm,
+                    borderTopWidth: 1,
+                    borderTopColor: tokens.border,
+                  }}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <TouchableOpacity
+                      onPress={() => setPdfZoom((z) => Math.max(75, z - 15))}
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: RADIUS.sm,
+                        borderWidth: 1,
+                        borderColor: tokens.border,
+                        backgroundColor: tokens.background,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Text style={{ fontWeight: '700', color: tokens.textPrimary }}>-</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => setPdfZoom(100)}
+                      style={{
+                        paddingHorizontal: 8,
+                        height: 28,
+                        borderRadius: RADIUS.sm,
+                        borderWidth: 1,
+                        borderColor: tokens.border,
+                        backgroundColor: tokens.background,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: tokens.primary }}>
+                        {pdfZoom}%
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => setPdfZoom((z) => Math.min(150, z + 15))}
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: RADIUS.sm,
+                        borderWidth: 1,
+                        borderColor: tokens.border,
+                        backgroundColor: tokens.background,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Text style={{ fontWeight: '700', color: tokens.textPrimary }}>+</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <TouchableOpacity
+                      onPress={() => setPdfCurrentPage((p) => Math.max(1, p - 1))}
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: RADIUS.sm,
+                        borderWidth: 1,
+                        borderColor: tokens.border,
+                        backgroundColor: tokens.background,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <MasteraIcon name="chevron-left" size={14} color={tokens.textPrimary} />
+                    </TouchableOpacity>
+                    <Text style={{ fontSize: 12, fontWeight: '600', color: tokens.textMuted }}>
+                      Page {pdfCurrentPage} of 14
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => setPdfCurrentPage((p) => Math.min(14, p + 1))}
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: RADIUS.sm,
+                        borderWidth: 1,
+                        borderColor: tokens.border,
+                        backgroundColor: tokens.background,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <MasteraIcon name="chevron-right" size={14} color={tokens.textPrimary} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+
+              {/* PDF Document Page Sheet Canvas */}
+              <View
+                style={{
+                  backgroundColor: tokens.surface,
+                  borderRadius: RADIUS.md,
+                  borderWidth: 1.5,
+                  borderColor: tokens.border,
+                  padding: SPACING.lg * (pdfZoom / 100),
+                  minHeight: 460,
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.08,
+                  shadowRadius: 10,
+                  elevation: 3,
+                }}
+              >
+                {/* Document Top Bar */}
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    borderBottomWidth: 1,
+                    borderBottomColor: tokens.border,
+                    paddingBottom: 8,
+                    marginBottom: 16,
+                  }}
+                >
+                  <Text style={{ fontSize: 10, fontWeight: '700', color: tokens.primary, letterSpacing: 0.5 }}>
+                    MASTERA LEARNING COMPANION · {courseTitle.toUpperCase()}
+                  </Text>
+                  <Text style={{ fontSize: 10, color: tokens.textMuted }}>
+                    SECTION {activeChapter.orderIndex}.{pdfCurrentPage}
+                  </Text>
+                </View>
+
+                {/* Simulated PDF Typography with scalable zoom */}
+                <Text
+                  style={{
+                    fontSize: 18 * (pdfZoom / 100),
+                    fontWeight: '800',
+                    color: tokens.textPrimary,
+                    marginBottom: 8,
+                  }}
+                >
+                  {activeChapter.title}
+                </Text>
+
+                <Text
+                  style={{
+                    fontSize: 13 * (pdfZoom / 100),
+                    lineHeight: 20 * (pdfZoom / 100),
+                    color: tokens.textPrimary,
+                    marginBottom: 16,
+                    textAlign: 'justify',
+                  }}
+                >
+                  {contentBody.bodyText}
+                </Text>
+
+                {/* Embedded Math Formula Box inside PDF Sheet */}
+                <View
+                  style={{
+                    backgroundColor: tokens.background,
+                    borderRadius: RADIUS.sm,
+                    borderWidth: 1,
+                    borderColor: tokens.border,
+                    padding: 12 * (pdfZoom / 100),
+                    marginVertical: 12,
+                    alignItems: 'center',
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 14 * (pdfZoom / 100),
+                      fontFamily: 'monospace',
+                      fontWeight: '700',
+                      color: tokens.primary,
+                    }}
+                  >
+                    {contentBody.formulaLatex}
+                  </Text>
+                </View>
+
+                <Text
+                  style={{
+                    fontSize: 13 * (pdfZoom / 100),
+                    lineHeight: 20 * (pdfZoom / 100),
+                    color: tokens.textPrimary,
+                    marginBottom: 16,
+                    textAlign: 'justify',
+                  }}
+                >
+                  This official module chapter covers critical theorems, standard proofs, and solved illustrative examples directly synchronized from the university syllabus.
+                </Text>
+
+                {/* PDF Page Bottom Watermark / Number */}
+                <View
+                  style={{
+                    marginTop: 'auto',
+                    paddingTop: 16,
+                    borderTopWidth: 1,
+                    borderTopColor: tokens.border,
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <Text style={{ fontSize: 10, color: tokens.textMuted }}>
+                    {activeCategory} · {pdfFileName}
+                  </Text>
+                  <Text style={{ fontSize: 10, fontWeight: '700', color: tokens.textPrimary }}>
+                    {pdfCurrentPage}
+                  </Text>
+                </View>
+              </View>
             </View>
-            <Text style={[styles.calloutBody, { color: tokens.textPrimary }]}>
-              {contentBody.keyIdeaSummary}
-            </Text>
-          </View>
+          ) : (
+            /* ============================================================== */
+            /* RICH NOTES / TEXT READER                                       */
+            /* ============================================================== */
+            <>
+              {/* Body Text */}
+              <Text style={[styles.readerBody, { color: tokens.textPrimary }]}>
+                {contentBody.bodyText}
+              </Text>
+
+              {/* Math / Formula Box */}
+              <View style={[styles.formulaBox, { backgroundColor: tokens.surface, borderColor: tokens.border }]}>
+                <Text style={[styles.formulaText, { color: tokens.primary }]}>
+                  {contentBody.formulaLatex}
+                </Text>
+              </View>
+
+              {/* Callout Summary Box */}
+              <View style={[styles.calloutBox, { backgroundColor: tokens.amberSoft, borderColor: tokens.amber }]}>
+                <View style={styles.calloutHeaderRow}>
+                  <MasteraIcon name="lightbulb" size={16} color={tokens.amber} />
+                  <Text style={[styles.calloutTitle, { color: tokens.textPrimary }]}>
+                    Key Idea
+                  </Text>
+                </View>
+                <Text style={[styles.calloutBody, { color: tokens.textPrimary }]}>
+                  {contentBody.keyIdeaSummary}
+                </Text>
+              </View>
+            </>
+          )}
 
           {/* Action Row */}
           <View style={styles.readerActions}>
@@ -289,15 +628,15 @@ export function CourseMaterialAndReaderScreens({
             )
             .map((ch, idx) => ({
               item: ch,
-              canOpenNow: true,
-              accessBadge: ch.isFree ? 'Free' : idx === 3 ? 'Locked' : 'Included',
+              canOpenNow: hasActiveAccess || ch.isFree,
+              accessBadge: ch.isFree ? 'Free' : hasActiveAccess ? 'Included' : 'Locked',
               isCompleted: idx === 0,
             }))
         : [];
     const chapters = rawChapters.map((r, idx) => ({
       item: r.item || r,
-      canOpenNow: r.canOpenNow !== false,
-      accessBadge: r.accessBadge || (idx === 3 ? 'Locked' : 'Included'),
+      canOpenNow: hasActiveAccess || (r.item && r.item.isFree) || r.canOpenNow !== false,
+      accessBadge: r.accessBadge || (hasActiveAccess || (r.item && r.item.isFree) ? 'Included' : 'Locked'),
       isCompleted: idx === 0,
     }));
 
@@ -343,7 +682,7 @@ export function CourseMaterialAndReaderScreens({
               </View>
             ) : (
               chapters.map((ch, idx) => {
-              const isLocked = ch.accessBadge === 'Locked' || idx === 3;
+              const isLocked = ch.accessBadge === 'Locked' || (!hasActiveAccess && !ch.item.isFree);
               const isCompleted = ch.isCompleted;
               const isChapterDownloaded =
                 downloadedChapters.has(ch.item.id) || localCourseDownloaded;

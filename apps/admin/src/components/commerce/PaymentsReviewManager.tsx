@@ -64,6 +64,7 @@ export function PaymentsReviewManager({
   const [zoomPercent, setZoomPercent] = useState<number>(100);
   const [rotationDeg, setRotationDeg] = useState<number>(0);
   const [rejectionReason, setRejectionReason] = useState<string>('');
+  const [isApproving, setIsApproving] = useState<boolean>(false);
 
   const tokens = ADMIN_THEMES[themeMode];
 
@@ -236,57 +237,48 @@ export function PaymentsReviewManager({
             {/* Receipt Canvas */}
             <div
               style={{
-                backgroundColor: tokens.sidebarBg,
+                backgroundColor: '#0f172a',
                 borderRadius: RADIUS.lg,
-                padding: SPACING.xxl,
+                padding: SPACING.lg,
                 display: 'flex',
                 justifyContent: 'center',
                 alignItems: 'center',
                 overflow: 'hidden',
+                minHeight: 460,
               }}
             >
               <div
                 style={{
-                  backgroundColor: tokens.surface,
-                  color: tokens.textPrimary,
-                  borderRadius: RADIUS.lg,
-                  padding: SPACING.xl,
-                  width: 300,
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
                   transform: `scale(${zoomPercent / 100}) rotate(${rotationDeg}deg)`,
                   transition: 'transform 0.15s ease',
+                  maxWidth: '100%',
                 }}
               >
-                <div style={{ fontSize: 18, fontWeight: 700 }}>
-                  {selectedOrder.paymentMethodName}
-                </div>
-                <div
+                <img
+                  src={selectedOrder.receiptSignedUrl}
+                  alt={`Student Attached Screenshot - ${selectedOrder.studentName}`}
                   style={{
-                    color: tokens.primary,
-                    fontWeight: 600,
-                    fontSize: 13,
-                    marginBottom: SPACING.md,
+                    maxWidth: '100%',
+                    maxHeight: 520,
+                    objectFit: 'contain',
+                    borderRadius: RADIUS.md,
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
                   }}
-                >
-                  Transaction successful
-                </div>
-                <div style={{ fontSize: 12, color: tokens.textMuted }}>
-                  From
-                </div>
-                <div style={{ fontWeight: 700, marginBottom: SPACING.sm }}>
-                  {selectedOrder.studentName}
-                </div>
-                <div style={{ fontSize: 12, color: tokens.textMuted }}>
-                  Amount
-                </div>
-                <div style={{ fontWeight: 700, marginBottom: SPACING.sm }}>
-                  {selectedOrder.expectedAmountETB} ETB
-                </div>
-                <div style={{ fontSize: 12, color: tokens.textMuted }}>
-                  Reference
-                </div>
-                <div style={{ fontWeight: 700 }}>
-                  {selectedOrder.transactionReference}
-                </div>
+                  onError={(e) => {
+                    const target = e.currentTarget;
+                    target.style.display = 'none';
+                    if (target.parentElement) {
+                      const msg = document.createElement('div');
+                      msg.innerText = 'Unable to render receipt image. Please refresh.';
+                      msg.style.color = '#ef4444';
+                      msg.style.fontWeight = 'bold';
+                      target.parentElement.appendChild(msg);
+                    }
+                  }}
+                />
               </div>
             </div>
           </div>
@@ -332,7 +324,9 @@ export function PaymentsReviewManager({
 
               <span style={{ color: tokens.textMuted }}>Product</span>
               <span style={{ textAlign: 'right', fontWeight: 600 }}>
-                {selectedOrder.productType.replace(/_/g, ' ')}
+                {selectedOrder.productType === 'FULL_COURSE_BUNDLE' || (selectedOrder.expectedAmountETB >= 350 && selectedOrder.productType !== 'EXTRA_SINGLE_COURSE')
+                  ? 'FULL FRESHMAN PACKAGE'
+                  : selectedOrder.productType.replace(/_/g, ' ')}
               </span>
 
               <span style={{ color: tokens.textMuted }}>Courses selected</span>
@@ -432,23 +426,41 @@ export function PaymentsReviewManager({
 
                 <button
                   type="button"
-                  onClick={() =>
-                    onApproveOrder(
-                      selectedOrder.orderId,
-                      selectedOrder.expectedAmountETB
-                    )
-                  }
+                  disabled={isApproving || selectedOrder.status === 'APPROVED'}
+                  onClick={async () => {
+                    try {
+                      setIsApproving(true);
+                      await onApproveOrder(
+                        selectedOrder.orderId,
+                        selectedOrder.expectedAmountETB
+                      );
+                      setSelectedOrder((prev) =>
+                        prev ? { ...prev, status: 'APPROVED' } : null
+                      );
+                    } finally {
+                      setIsApproving(false);
+                    }
+                  }}
                   style={{
                     padding: `${SPACING.sm}px ${SPACING.xl}px`,
                     borderRadius: RADIUS.md,
                     border: 'none',
-                    backgroundColor: tokens.primary,
+                    backgroundColor:
+                      selectedOrder.status === 'APPROVED'
+                        ? tokens.success
+                        : tokens.primary,
                     color: tokens.sidebarText,
                     fontWeight: 600,
-                    cursor: 'pointer',
+                    cursor:
+                      selectedOrder.status === 'APPROVED' ? 'default' : 'pointer',
+                    opacity: isApproving ? 0.7 : 1,
                   }}
                 >
-                  Approve and activate access
+                  {isApproving
+                    ? 'Activating access...'
+                    : selectedOrder.status === 'APPROVED'
+                    ? '✓ Access Activated'
+                    : 'Approve and activate access'}
                 </button>
               </div>
             </div>

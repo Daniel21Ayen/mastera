@@ -330,8 +330,9 @@ export function getCandidateHosts(): string[] {
 
   const addHostPair = (ip: string) => {
     if (ip && ip !== 'localhost' && ip !== '127.0.0.1') {
+      hosts.push(`http://${ip}:8081`); // Metro proxy default port (UFW allowed)
       hosts.push(`http://${ip}:53317`); // UFW firewall pre-whitelisted port
-      hosts.push(`http://${ip}:8081`); // Metro proxy fallback (UFW allowed)
+      hosts.push(`http://${ip}:8085`); // Alternative Metro proxy port
       hosts.push(`http://${ip}:3000`); // Direct API port
     }
   };
@@ -368,12 +369,16 @@ export function getCandidateHosts(): string[] {
   } catch {}
 
   // 3. Known machine local IPs and development fallbacks
+  addHostPair('10.41.100.135');
+  addHostPair('192.168.137.217');
   addHostPair('172.16.132.37');
-  hosts.push('http://localhost:53317');
   hosts.push('http://localhost:8081');
+  hosts.push('http://localhost:53317');
+  hosts.push('http://localhost:8085');
   hosts.push('http://localhost:3000');
-  hosts.push('http://10.0.2.2:53317');
   hosts.push('http://10.0.2.2:8081');
+  hosts.push('http://10.0.2.2:53317');
+  hosts.push('http://10.0.2.2:8085');
   hosts.push('http://10.0.2.2:3000');
   return [...new Set(hosts)];
 }

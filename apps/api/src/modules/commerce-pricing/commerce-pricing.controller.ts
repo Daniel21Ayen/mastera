@@ -33,11 +33,15 @@ export class CommercePricingController {
       reason: string;
     }
   ) {
-    const actor = body.actor || DEFAULT_ADMIN_ACTOR;
+    const actor: AuthenticatedAdminContext = {
+      ...DEFAULT_ADMIN_ACTOR,
+      ...(body.actor || {}),
+      isActive: true,
+    };
     return this.pricingService.updatePaymentSettings(
       actor,
       body.settings,
-      body.reason
+      body.reason || 'Admin update via API'
     );
   }
 

@@ -24,6 +24,7 @@ export interface StudentSummaryDto {
     coursesCount: number;
   };
   perCourseProgress: Record<string, number>;
+  activeCourseIds?: string[];
   continueLearningTarget: {
     courseId?: string;
     courseTitle?: string;

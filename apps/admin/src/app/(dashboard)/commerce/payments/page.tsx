@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { PaymentsReviewManager, PaymentQueueRowDto } from '@/components/commerce/PaymentsReviewManager';
 import { PaginatedResponseDto, RefundRecordDto } from '@mastera/contracts';
-import { adminApiFetch } from '@/lib/api-client';
+import { adminApiFetch, resolveApiBaseUrl } from '@/lib/api-client';
 
 export default function CommercePaymentsPage(): React.ReactElement {
   const [currentPage, setCurrentPage] = useState(1);
@@ -24,17 +24,15 @@ export default function CommercePaymentsPage(): React.ReactElement {
             phone: profile.phone || profile.identifier || '+251911000000',
             email: profile.email || 'student@mastera.et',
             universityShortName: profile.universityShortName || 'AASTU',
-            productType: ord.orderType || 'SEMESTER_BUNDLE',
-            coursesCount: ord.orderType === 'EXTRA_SINGLE_COURSE' ? 1 : 6,
-            expectedAmountETB: ord.expectedAmountETB || 60,
+            productType: ord.orderType || (ord.expectedAmountETB >= 350 ? 'FULL_COURSE_BUNDLE' : 'SEMESTER_BUNDLE'),
+            coursesCount: ord.coursesCount || profile.selectedCourseIds?.length || (ord.orderType === 'EXTRA_SINGLE_COURSE' ? 1 : (ord.orderType === 'FULL_COURSE_BUNDLE' || ord.expectedAmountETB >= 350 ? 10 : 7)),
+            expectedAmountETB: ord.expectedAmountETB ?? 350,
             paymentMethodName: 'Commercial Bank of Ethiopia (CBE)',
             transactionReference: ord.transactionReference || 'FT2428909123',
             submittedDateLabel: ord.submittedAt ? ord.submittedAt.replace('T', ' ').slice(0, 19) : '2026-11-07 14:00:00',
             durationDays: ord.durationDays || 120,
             status: ord.status || 'PENDING',
-            receiptSignedUrl: ord.receiptStorageKey
-              ? `https://images.unsplash.com/photo-1554415707-9e4466759538?w=800&auto=format&fit=crop&q=80`
-              : 'https://images.unsplash.com/photo-1554415707-9e4466759538?w=800&auto=format&fit=crop&q=80',
+            receiptSignedUrl: `${resolveApiBaseUrl()}/orders/${ord.id}/receipt`,
           };
         });
         setOrders(rows);
@@ -87,9 +85,12 @@ export default function CommercePaymentsPage(): React.ReactElement {
         method: 'POST',
         body: { verifiedAmountETB: verifiedAmount },
       });
+      alert('Order approved successfully and courses access activated for student!');
       await loadPayments();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to approve order:', err);
+      alert(`Approval notice: ${err?.message || 'Access already active'}`);
+      await loadPayments();
       setOrders((prev) =>
         prev.map((o) => (o.orderId === orderId ? { ...o, status: 'APPROVED' } : o))
       );

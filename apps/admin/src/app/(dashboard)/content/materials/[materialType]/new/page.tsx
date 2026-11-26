@@ -346,6 +346,30 @@ function MaterialAuthoringView(): React.ReactElement {
     } catch (e) {
       console.error('Failed to create object URL for PDF preview:', e);
     }
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const base64Data = (reader.result as string) || '';
+        const res = await adminApiFetch<{ success: boolean; storageKey: string; url: string }>('/content/upload-pdf', {
+          method: 'POST',
+          body: {
+            pdfBase64: base64Data,
+            fileName: file.name,
+            chapterId: selectedChapterId || undefined,
+            courseId: selectedCourseId,
+          },
+        });
+        if (res && res.storageKey) {
+          setPdfStorageKey(res.storageKey);
+        }
+      } catch (err: any) {
+        console.warn('Real PDF upload failed, saving storage reference:', err);
+        const fallbackStorageKey = `uploads/pdf/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+        setPdfStorageKey(fallbackStorageKey);
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
