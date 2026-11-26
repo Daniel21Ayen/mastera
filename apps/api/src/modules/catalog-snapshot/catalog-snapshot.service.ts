@@ -125,7 +125,7 @@ export class CatalogSnapshotService {
     const scopedPublishedExamSets = allExamSets.filter((es) => {
       if (es.status !== 'PUBLISHED') return false;
       if (es.category === 'COC') {
-        // Standalone COC sets match stream/semester if set
+        // COC sets are listed in the Exams category and match stream/semester if set.
         if (
           query.stream &&
           es.stream !== null &&

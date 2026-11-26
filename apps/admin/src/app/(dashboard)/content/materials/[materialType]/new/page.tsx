@@ -73,6 +73,7 @@ function MaterialAuthoringView(): React.ReactElement {
   const [chapterTitle, setChapterTitle] = useState('');
   const [bodyMarkdownLatex, setBodyMarkdownLatex] = useState('');
   const [pdfStorageKey, setPdfStorageKey] = useState<string | null>(null);
+  const [pdfDataBase64, setPdfDataBase64] = useState<string | null>(null);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [isFree, setIsFree] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -187,6 +188,8 @@ function MaterialAuthoringView(): React.ReactElement {
       setChapterTitle(currentChapter.title || '');
       setBodyMarkdownLatex(currentChapter.bodyMarkdownLatex || '');
       setPdfStorageKey(currentChapter.pdfStorageKey || null);
+    setPdfDataBase64(null);
+      setPdfDataBase64(null);
       setPdfPreviewUrl(null);
       setIsFree(Boolean(currentChapter.isFree));
     }
@@ -325,12 +328,18 @@ function MaterialAuthoringView(): React.ReactElement {
     }
   };
 
-  const handlePdfFileSelect = (file: File) => {
+  const handlePdfFileSelect = async (file: File) => {
     if (!file) return;
     if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
       alert('Please select a valid PDF file.');
       return;
     }
+    const storageKey = `uploads/pdf/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+    setPdfStorageKey(storageKey);
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let binary = '';
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+    setPdfDataBase64(btoa(binary));
     try {
       const previewUrl = URL.createObjectURL(file);
       setPdfPreviewUrl(previewUrl);
@@ -400,6 +409,7 @@ function MaterialAuthoringView(): React.ReactElement {
             title: chapterTitle.trim() || currentChapter?.title || 'Untitled Chapter',
             bodyMarkdownLatex,
             pdfStorageKey,
+            pdfDataBase64,
             isFree,
           },
         },
@@ -447,6 +457,7 @@ function MaterialAuthoringView(): React.ReactElement {
             title: chapterTitle.trim() || currentChapter?.title || 'Untitled Chapter',
             bodyMarkdownLatex,
             pdfStorageKey,
+            pdfDataBase64,
             isFree,
           },
         },

@@ -22,7 +22,7 @@ export interface RealAppDataState {
   chaptersByBookId: Record<string, any[]>;
   chapterBodyByChapterId: Record<
     string,
-    { bodyText: string; formulaLatex: string; keyIdeaSummary: string }
+    { bodyText: string; formulaLatex: string; keyIdeaSummary: string; pdfStorageKey?: string | null }
   >;
   questionsByChapterId: Record<string, QuestionItemDto[]>;
   questionsByExamSetId: Record<string, QuestionItemDto[]>;
@@ -80,6 +80,7 @@ export function buildDataStateFromSnapshot(
         `${cb.title} — Comprehensive study module for higher education semester curriculum.`,
       formulaLatex: "\\lim_{h \\to 0} \\frac{f(x+h) - f(x)}{h} = f'(x)",
       keyIdeaSummary: `Key theoretical concepts and learning outcomes for ${cb.title}.`,
+      pdfStorageKey: cb.pdfStorageKey ?? null,
     };
   }
 
@@ -90,6 +91,7 @@ export function buildDataStateFromSnapshot(
         bodyText: `${ch.title} — Official university course curriculum material.`,
         formulaLatex: "E = mc^2",
         keyIdeaSummary: `Master the foundational methods and derivations for ${ch.title}.`,
+        pdfStorageKey: ch.pdfStorageKey ?? null,
       };
     }
   }
@@ -285,6 +287,7 @@ export function unpackPackageIntoState(
       bodyText: ch.bodyMarkdownLatex || ch.title,
       formulaLatex: "\\lim_{h \\to 0} \\frac{f(x+h) - f(x)}{h} = f'(x)",
       keyIdeaSummary: `Key theoretical concepts and learning outcomes for ${ch.title}.`,
+      pdfStorageKey: ch.pdfStorageKey ?? null,
     };
   }
 

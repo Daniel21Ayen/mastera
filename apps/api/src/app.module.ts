@@ -122,14 +122,16 @@ import { AppController } from './app.controller';
       useFactory: (
         prisma: PrismaService,
         scope: ScopeAuthorizationService,
-        audit: AuditService
+        audit: AuditService,
+        s3: S3StorageService
       ) =>
         new ContentAuthoringService(
           new PrismaContentRepository(prisma),
           scope,
-          audit
+          audit,
+          s3
         ),
-      inject: [PrismaService, ScopeAuthorizationService, AuditService],
+      inject: [PrismaService, ScopeAuthorizationService, AuditService, S3StorageService],
     },
     {
       provide: ContentPackageBuilderService,

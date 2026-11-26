@@ -23,6 +23,7 @@ export interface MaterialStudioChapterDraft {
   title: string;
   bodyMarkdownLatex: string;
   pdfStorageKey?: string | null;
+  pdfDataBase64?: string | null;
   isFreeTrial: boolean;
   status?: string;
 }
@@ -147,6 +148,7 @@ export function MaterialAuthoringStudio({
       title: 'Chapter 1',
       bodyMarkdownLatex: '',
       pdfStorageKey: null,
+      pdfDataBase64: null,
       isFreeTrial: false,
     };
 
@@ -174,39 +176,20 @@ export function MaterialAuthoringStudio({
     setSelectedChapterId(newDraft.id);
   };
 
-  const handlePdfFileSelect = (file: File) => {
+  const handlePdfFileSelect = async (file: File) => {
     if (!file) return;
     if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
       alert('Please select a valid PDF file.');
       return;
     }
-    const reader = new FileReader();
-    reader.onload = async () => {
-      try {
-        const base64Data = (reader.result as string) || '';
-        const res = await adminApiFetch<{ success: boolean; storageKey: string; url: string }>('/content/upload-pdf', {
-          method: 'POST',
-          body: {
-            pdfBase64: base64Data,
-            fileName: file.name,
-            chapterId: currentChapter.id.startsWith('draft-') ? undefined : currentChapter.id,
-            courseId: selectedCourseId,
-          },
-        });
-        if (res && res.storageKey) {
-          updateCurrentChapter({
-            pdfStorageKey: res.storageKey,
-          });
-        }
-      } catch (err: any) {
-        console.warn('Real PDF upload failed, saving storage reference:', err);
-        const fallbackStorageKey = `uploads/pdf/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-        updateCurrentChapter({
-          pdfStorageKey: fallbackStorageKey,
-        });
-      }
-    };
-    reader.readAsDataURL(file);
+    const storageKey = `uploads/pdf/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let binary = '';
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+    updateCurrentChapter({
+      pdfStorageKey: storageKey,
+      pdfDataBase64: btoa(binary),
+    });
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -284,7 +267,7 @@ export function MaterialAuthoringStudio({
           <button
             type="button"
             onClick={() =>
-              updateCurrentChapter({ title: '', bodyMarkdownLatex: '', pdfStorageKey: null })
+              updateCurrentChapter({ title: '', bodyMarkdownLatex: '', pdfStorageKey: null, pdfDataBase64: null })
             }
             style={{
               padding: `${SPACING.sm}px ${SPACING.lg}px`,
@@ -640,7 +623,7 @@ export function MaterialAuthoringStudio({
               </div>
               <button
                 type="button"
-                onClick={() => updateCurrentChapter({ pdfStorageKey: null })}
+                onClick={() => updateCurrentChapter({ pdfStorageKey: null, pdfDataBase64: null })}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',

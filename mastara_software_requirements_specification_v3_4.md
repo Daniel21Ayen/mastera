@@ -90,7 +90,7 @@ The server is authoritative for eligibility, course counts, prices, payment appr
 
 ### 1.4 Product definition
 
-Mastara helps freshmen find materials, understand them, practise, and sit exams, even on budget phones with unreliable internet. A student sets University, Program, Semester, and Stream, adds courses to My Course List, tries free items, then buys access. Learning uses Modules, Notes, Amharic notes, Quiz 1–3, Mid / Final / Mock exams, and a standalone COC Exam.
+Mastara helps freshmen find materials, understand them, practise, and sit exams, even on budget phones with unreliable internet. A student sets University, Program, Semester, and Stream, adds courses to My Course List, tries free items, then buys access. Learning uses Modules, Notes, Amharic notes, Quiz 1–3, and the Exams category containing Mid, Final, Mock, and COC exam sets.
 
 ### 1.5 In scope
 
@@ -98,7 +98,7 @@ Mastara helps freshmen find materials, understand them, practise, and sit exams,
 
 * A stream-filtered catalog (`Natural`, `Social`, `Common`) cached on the phone and visible offline without loading states.
 
-* Course tabs `Material`, `Tests`, `Exams`; standalone `COC Exam` on Home.
+* Course tabs `Material`, `Tests`, `Exams`; the `Exams` tab contains `Mid`, `Final`, `Mock`, and `COC`.
 
 * Online streaming into memory, optional per-course and per-chapter download, delete downloads, answer review with Show / Hide explanations.
 
@@ -195,7 +195,7 @@ Manual payment through bank / mobile-money transfer verified from a receipt imag
 | **D4** | Local-first account; nothing reaches the server before the first qualifying bundle order | Changed | 
 | **D5** | Online-first content bodies with optional download (`D24`) | Changed | 
 | **D6** | Continue Learning removed from Home and the specification | Unchanged (see `DR-02`) | 
-| **D7** | Home is card-based; COC Exam card uses course-card style | Unchanged | 
+| **D7** | Home is card-based; Exams are reached from the course `Exams` tab | Changed |
 | **D8** | Material tabs: `Modules`, `Notes`, `Amharic`. Amharic notes are separate content items; no language toggle inside content | Unchanged | 
 | **D9** | Screenshots and screen recording blocked on every content screen | Unchanged | 
 | **D10** | Light and dark theme on every screen | Unchanged | 
@@ -203,7 +203,7 @@ Manual payment through bank / mobile-money transfer verified from a receipt imag
 | **D12** | Review Answer after every exam and COC with Show/Hide explanations | Unchanged | 
 | **D13** | Exam duration set on the exam set, not on question forms | Unchanged | 
 | **D14** | Question forms and lists follow Section 10.5 | Unchanged | 
-| **D15** | COC Exam is a standalone Home module | Unchanged | 
+| **D15** | COC exam sets are listed in the course `Exams` category beside `Mock` | Changed |
 | **D16** | GPA is out of scope | Unchanged | 
 | **D17** | Payment is a manual receipt screenshot verified by Admin | Confirmed | 
 | **D18** | Each course carries a free-trial item count set by Admin | Unchanged | 
@@ -750,7 +750,7 @@ A source must also exist (online stream or downloaded copy). A free item never c
   $$
 
   
-  `COC Exam` sits beside the course tree as a standalone module launched from its dedicated card on `Home`.
+  `COC` is an exam category beside `Mid`, `Final`, and `Mock` inside the course `Exams` tab.
 
 ### 9.3 Home Tab, adaptive states and five-card map (`D7`, `DR-02`)
 
@@ -774,11 +774,11 @@ A source must also exist (online stream or downloaded copy). A free item never c
 
   4. **Store Status mini-card (`Store`):** Shows entitlement summary (`Active · 128d`, `No bundle`, `Awaiting`, `Expiring`). Tapping opens the `Subscription and store` screen.
 
-  5. **COC Exam card:** Dark Navy full-width card with Amber trophy icon, title `COC Exam`, subtitle adaptive by state (`"Test your knowledge across all courses"`, `"1 free sample set"`, or `"Downloaded set ready"`). Tapping opens the standalone `COC Exam` module.
+  5. **Exams entry:** Dark Navy full-width card with Amber trophy icon, title `Exams`, subtitle adaptive by state (`"Mid · Final · Mock · COC"`, `"Free sample sets available"`, or `"Downloaded sets ready"`). Tapping opens the selected course's `Exams` tab, where `COC` is listed beside `Mock`.
 
 * **Offline banner:** When offline, a Dark Navy banner appears above the hero card: `"You are offline. Downloaded items still open."`
 
-* **Recently accessed section (`DR-02`):** Listed on the design sheet below the `COC Exam` card (`See all`, showing recent course chapters/notes). Per `D6` and `DR-02`, this is held out of `P0` pending product-owner confirmation (`Q24`).
+* **Recently accessed section (`DR-02`):** Listed on the design sheet below the Exams entry (`See all`, showing recent course chapters/notes). Per `D6` and `DR-02`, this is held out of `P0` pending product-owner confirmation (`Q24`).
 
 ### 9.4 Payment Alerts and Store Status screens
 
@@ -894,9 +894,9 @@ All three Material sub-tabs (`Modules`, `Notes`, `Amharic`) follow a consistent 
 
    * Bottom full-width Royal Blue CTA: `Next`.
 
-### 9.8 Exams Flow: Mid, Final and Mock ,coc (`D12`, `D13`)
+### 9.8 Exams Flow: Mid, Final, Mock and COC (`D12`, `D13`, `D15`)
 
-Unlike Material and Quizzes, the `Exams` tab (`Mid` | `Final` | `Mock`) has **no intermediate book or chapter list** — it opens the exam sets list directly:
+Unlike Material and Quizzes, the `Exams` tab (`Mid` | `Final` | `Mock` | `COC`) has **no intermediate book or chapter list** — it opens the exam sets list directly:
 
 1. **Step 1 — Exam Sets List:**
 
@@ -905,6 +905,8 @@ Unlike Material and Quizzes, the `Exams` tab (`Mid` | `Final` | `Mock`) has **no
    * `Final` lists university final exam sets (`AASTU · Final 2023`, `BDU · Final 2023`, `AAU · Final 2023`).
 
    * `Mock` is not tied to a single university exam; it lists curated mock exam sets (`Mock Exam 1`, `Mock Exam 2`, `Mock Exam 3`).
+
+  * `COC` lists curated COC exam sets for the selected course and academic scope. COC is displayed beside `Mock` in the Exams category and is not a Home-level module.
 
 2. **Step 2 — Start Exam Confirmation Sheet:**
 
@@ -924,11 +926,11 @@ Unlike Material and Quizzes, the `Exams` tab (`Mid` | `Final` | `Mock`) has **no
 
    * Auto-submits when the monotonic timer reaches `00:00`. Following submission, the student is taken to the Exam Result and `Review answers` flow.
 
-### 9.9 Standalone COC Exam Flow (`D15`, `DR-07`)
+### 9.9 COC Exam Flow inside Exams (`D15`, `DR-07`)
 
-* **Step 1 — COC Sets List (`< COC Exam`):**
+* **Step 1 — COC Sets List (`< Exams · COC`):**
 
-  * Opened exclusively from the `COC Exam` card on `Home`.
+  * Opened from the `COC` tab beside `Mock` inside the course `Exams` category.
 
   * Subtitle: `"Questions from all courses in one place."`
 
@@ -1095,7 +1097,7 @@ Every catalog row uses a structured two-part badge/chip vocabulary:
 
   1. **Royal Blue (`primary`):** Primary action buttons, active navigation pills, active tabs, answered question tiles, progress rings, and primary brand headers.
 
-  2. **Navy Ink (`ink`):** Primary typography, high-contrast dark cards (`COC Exam` card, `Active Bundle` card, timer pills, offline banners), and dark-mode surfaces.
+  2. **Navy Ink (`ink`):** Primary typography, high-contrast dark cards (`Exams` entry, `Active Bundle` card, timer pills, offline banners), and dark-mode surfaces.
 
   3. **White / Cool Alabaster (`surface`):** Card backgrounds, page canvases, and button contrast text.
 
@@ -1357,12 +1359,12 @@ Pure domain functions are shared through `@mastara/domain` and executed identica
 | **`FR-A01`–`FR-A11`, `REG-01`–`REG-16`** | `P0` | Local-first account, offline sign-in/profile, first-bundle order submission, claim-secret flow, atomic SQLite migration (Section 5) | Zero student network requests before first bundle order; airplane-mode registration/sign-in passes; claim + migration preserves all local progress | 
 | **`PUR-01`–`PUR-10`** | `P0` | Bundle-first purchase rule, configurable $\min/\max$, calculated/fixed pricing, tiered extra single courses, quote snapshots (Section 6) | Single course rejected without bundle (`SINGLE_COURSE_BUNDLE_REQUIRED`); server ignores client totals | 
 | **`ACC-01`–`ACC-06`, `FR-C20`–`FR-C23`** | `P0` | Instant offline catalog, shared `canOpen` function, in-memory online streaming, offline downloaded-only access (Section 8.1–8.3) | Lists render in $< 300\text{ ms}$ in airplane mode; online stream writes no content files to disk | 
-| **`PAY-01`–`PAY-03`, `FR-C24`** | `P0` | Single `LockedContentSheet` paywall at Material, Tests, Exams, and COC gates (Section 8.6) | Paywall appears at all 4 gates and routes to Store with course preselected | 
+| **`PAY-01`–`PAY-03`, `FR-C24`** | `P0` | Single `LockedContentSheet` paywall at Material, Tests, and Exams (including COC) (Section 8.6) | Paywall appears at all 3 top-level content gates and routes to Store with course preselected |
 | **`DWN-01`–`DWN-07`, `FR-C25`** | `P0` | Resumable per-course and per-chapter downloads, device-bound encryption, atomic version updates, `Download`/`Delete` toggle (Section 8.5) | Expired/revoked entitlement or R15 Free\$\\rightarrow$Paid transition blocks opening downloaded file offline | 
 | **`DWN-08`–`DWN-09`** | `P1` | **`[UI]`** Download Manager screen with storage breakdown and "Download on Wi-Fi only" toggle (Section 8.5, 9.12) | Wi-Fi toggle blocks cellular download until overridden; storage metrics match disk usage | 
 | **`SYN-01`–`SYN-03`, `OFF-01`–`OFF-05`** | `P0` | Event-driven bidirectional sync (catalog/versions down; progress/attempts/outbox up after registration) (Section 8.4) | No fixed-interval polling; outbox flushes only when `REGISTERED_REMOTE` | 
 | **`UI-SET-01`** | `P1` | **`[UI]`** App UI language toggle (`English` / `Amharic`) in Settings (Section 3.3 `DR-13`, 9.12) | Switches UI chrome labels without altering course content items (`D8`) | 
-| **`FR-UI-01`–`FR-UI-10`** | `P0` | **`[UI]`** Student app screen flows (`Auth`, `Home` 5-card map & adaptive states, 3-step `Material` & `Quiz 1–3`, direct `Mid/Final/Mock` exams, standalone `COC` with question palette, `Review answers` with `Show/Hide`) (Section 9) | Matches UI design baseline and Section 3.3 reconciliation rules | 
+| **`FR-UI-01`–`FR-UI-10`** | `P0` | **`[UI]`** Student app screen flows (`Auth`, `Home` 5-card map & adaptive states, 3-step `Material` & `Quiz 1–3`, direct `Mid/Final/Mock/COC` exam lists, COC runner with question palette, `Review answers` with `Show/Hide`) (Section 9) | Matches UI design baseline and Section 3.3 reconciliation rules |
 | **`FR-G11`–`FR-G14`** | `P0` | Per-set question numbering restarting at $1$, separate from global DB ID (Section 10.5) | Concurrent question creations in same set receive unique sequential display numbers | 
 | **`FR-G40`–`FR-G44`** | `P0` | Standard pagination envelope across all admin lists (Section 10.6) | Filter changes reset to page $1$; deleting last item on page steps back | 
 | **`FR-G45`–`FR-G48`, `ADM-01`–`ADM-04`** | `P0` | Gapless `MS0001`+ student IDs allocated only on first bundle approval; paid-only Admin Students directory (Section 5.7, 10.2) | $50$ concurrent approvals + forced rollback produce zero gaps; unpaid users absent from Admin | 
@@ -1380,8 +1382,8 @@ Pure domain functions are shared through `@mastara/domain` and executed identica
 | **Offline account** | Register, sign in, and edit profile in airplane mode; network spy shows zero student data sent; identifier-only sign-in fails (`FR-A01`–`FR-A06`). | 
 | **Catalog offline** | With no connection on first launch, every list renders from the bundled seed in $< 300\text{ ms}$ with accurate badges (`NFR-15`). | 
 | **Access matrix** | Every row of Section 8.2 behaves as written; online stream leaves zero files on disk; expired entitlement stops downloaded paid items offline. | 
-| **Paywall** | `LockedContentSheet` appears at Materials, Exams, Tests, and COC gates; `Purchase Course` opens Store with course preselected. | 
-| **UI baseline `[UI]`** | Student app implements the 4-colour system (`Royal Blue`, `Navy Ink`, `White`, `Amber`), 3-step `Modules`/`Notes`/`Amharic`/`Quiz 1–3` flows, direct `Mid`/`Final`/`Mock` lists, standalone `COC` runner, and `Show`/`Hide` answer review. | 
+| **Paywall** | `LockedContentSheet` appears at Materials, Tests, and Exams (including COC); `Purchase Course` opens Store with course preselected. |
+| **UI baseline `[UI]`** | Student app implements the 4-colour system (`Royal Blue`, `Navy Ink`, `White`, `Amber`), 3-step `Modules`/`Notes`/`Amharic`/`Quiz 1–3` flows, direct `Mid`/`Final`/`Mock`/`COC` exam lists, COC runner, and `Show`/`Hide` answer review. |
 | **Pagination** | Every admin list pages deterministically under filters; deleting the last row on a page steps back cleanly. | 
 | **CSV import** | `.pdf`/`.xlsx` renamed to `.csv` is rejected; Amharic and LaTeX with commas/quotes import accurately; dry run mutates nothing. | 
 | **Student IDs** | $50$ concurrent approvals produce gapless `MS` IDs; forced transaction failure leaves no gap. | 
@@ -1437,7 +1439,7 @@ Pure domain functions are shared through `@mastara/domain` and executed identica
 | **Phase 1 — Domain, Contracts & Schema** | `@mastara/domain` pure functions (`canOpen`, pricing, eligibility, claim secret), DTOs, Prisma/SQL migrations (`admin_user`, `admin_scope`, `counters`, `pricing_config`, `payment_method`, `refund`), role/scope guards, 2FA, `packages/ui-tokens` (4-colour student tokens + semantic admin tokens) | $100\%$ unit test pass on domain functions; schema migration & rollback verified; `FR-G60`–`FR-G63`, `FR-G65` pass | 
 | **Phase 2 — API, Approval & Claim** | Quote engine, order hardening, receipt validation/EXIF stripping, transactional `MS` counter, atomic approval, idempotent claim endpoint, takeover protection, `/catalog/snapshot`, `/entitlements/token` | Integration tests for pricing, idempotency, counter rollback, claim security, and takeover protection pass | 
 | **Phase 3 — Mobile Lifecycle & UI Shell** | Offline-first local registration/sign-in/profile (`Auth and Profile` sheets), 4-colour theme, `Home` 5-card map & adaptive states, local SQLite + seed catalog, Store UI, receipt compression, claim polling, atomic SQLite migration, `LockedContentSheet` | Offline-to-approved-claim flow passes on budget Android build; `FR-C20`–`FR-C24` pass | 
-| **Phase 4 — Content, Streaming, Runners & Downloads** | 3-step `Modules`/`Notes`/`Amharic` reader (in-memory streaming + shared math renderer), 3-step `Quiz 1–3` runner, direct `Mid`/`Final`/`Mock` exam runner, standalone `COC` runner with palette, `Show`/`Hide` answer review, resumable encrypted per-course/per-chapter downloads, Download Manager (`DWN-08`, `DWN-09`) | Online memory-only stream, offline encrypted download, clock-rollback check, atomic update, and `R15` tests pass | 
+| **Phase 4 — Content, Streaming, Runners & Downloads** | 3-step `Modules`/`Notes`/`Amharic` reader (in-memory streaming + shared math renderer), 3-step `Quiz 1–3` runner, direct `Mid`/`Final`/`Mock`/`COC` exam runner with COC palette, `Show`/`Hide` answer review, resumable encrypted per-course/per-chapter downloads, Download Manager (`DWN-08`, `DWN-09`) | Online memory-only stream, offline encrypted download, clock-rollback check, atomic update, and `R15` tests pass |
 | **Phase 5 — Admin Workflows** | Paid-only `Students` directory, receipt approval queue, independent bundle/tier/payment-method settings, refund workflow, maker-checker review flow, per-set question numbering, content-checked CSV import, universal pagination | Role/permission matrix and Playwright E2E approval/import/pagination tests pass (`FR-G11`–`FR-G55`, `FR-G64`) | 
 | **Phase 6 — End-to-End Hardening & Pilot** | Bidirectional sync conflict tests, device self-release & admin release, performance/memory profiling on $2\text{ GB}$ Android phone, AAB size verification ($< 20\text{ MB}$), university freshman pilot | All Section 16.1 & 16.2 gates green; `NFR-01`–`NFR-20` met | 
 
@@ -1541,6 +1543,6 @@ Pure domain functions are shared through `@mastara/domain` and executed identica
 
 * \[ \] Per-set question numbering restarting at $1$; content-validated UTF-8 CSV bulk import; standard pagination envelope on every admin list.
 
-* \[ \] Student app implements the complete v3.4 UI design baseline (four-colour palette in `packages/ui-tokens`, 5-card Home map, 3-step `Modules`/`Notes`/`Amharic`/`Quiz 1–3`, direct `Mid`/`Final`/`Mock` exams, standalone `COC` with question palette, `Show`/`Hide` answer review, Download Manager with Wi-Fi-only toggle).
+* \[ \] Student app implements the complete v3.4 UI design baseline (four-colour palette in `packages/ui-tokens`, 5-card Home map, 3-step `Modules`/`Notes`/`Amharic`/`Quiz 1–3`, direct `Mid`/`Final`/`Mock`/`COC` exams, COC question palette, `Show`/`Hide` answer review, Download Manager with Wi-Fi-only toggle).
 
 * \[ \] Zero mock code in production builds; API refuses to boot with weak secrets; pre-commit and CI secret scans pass; Light and Dark themes supported on every screen.

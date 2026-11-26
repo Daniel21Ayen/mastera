@@ -23,7 +23,7 @@ export interface CreateExamSetInput {
   category: ExamCategory;
   universityId: string | null;
   programId: string | null;
-  courseId: string | null; // Null for standalone COC sets (D15, Section 9.1)
+  courseId: string | null; // COC may aggregate questions across courses
   semester: 1 | 2 | null;
   stream: AcademicStream | null;
   year: string;

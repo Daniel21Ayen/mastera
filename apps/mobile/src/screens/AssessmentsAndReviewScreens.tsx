@@ -25,6 +25,9 @@ import {
 import { ResolvedCatalogRowView } from '../core/database/local-catalog-store';
 import { MasteraIcon } from '../shared/components/MasteraIcon';
 
+type QuizAttemptMode = 'PRACTICE' | 'EXAM';
+type QuestionNavigationMode = 'PAGED' | 'SCROLL';
+
 // ============================================================================
 // 1. TESTS TAB: 3-STEP QUIZ FLOW
 // ============================================================================
@@ -44,7 +47,8 @@ export interface CourseTestsTabProps {
   onDownloadChapterTap: (chapterId: string) => void;
   onCompleteQuizChapter: (
     chapterId: string,
-    answers: Record<string, string>
+    answers: Record<string, string>,
+    mode?: QuizAttemptMode
   ) => void;
   onBackToCourses?: () => void;
   themeMode?: ThemeMode;
@@ -76,9 +80,10 @@ export function CourseTestsQuizFlowScreen({
   const [selectedAnswers, setSelectedAnswers] = useState<
     Record<string, string>
   >({});
-  const [expandedQuestionIds, setExpandedQuestionIds] = useState<Set<string>>(
-    new Set()
-  );
+  const [quizMode, setQuizMode] = useState<QuizAttemptMode | null>(null);
+  const [quizNavigationMode, setQuizNavigationMode] =
+    useState<QuestionNavigationMode>('PAGED');
+  const [quizFinished, setQuizFinished] = useState(false);
 
   const tokens = STUDENT_THEMES[themeMode];
 
@@ -94,45 +99,77 @@ export function CourseTestsQuizFlowScreen({
   // ==========================================================================
   if (stage === 'REVIEW' && activeChapter) {
     const questions = questionsByChapterId[activeChapter.id] ?? [];
-    const score = questions.filter(
-      (q) => selectedAnswers[q.id] === q.correctOptionId
-    ).length;
-    const percent =
-      questions.length > 0 ? Math.round((score / questions.length) * 100) : 0;
-    const isPassed = percent >= 50;
 
-    return (
-      <ScrollView
-        style={[styles.container, { backgroundColor: tokens.background }]}
-        contentContainerStyle={styles.scrollContent}
-      >
-        {/* Top Header Row with Back Arrow */}
-        <View style={styles.topNavRow}>
+    if (!quizMode) {
+      return (
+        <ScrollView
+          style={[styles.container, { backgroundColor: tokens.background }]}
+          contentContainerStyle={styles.scrollContent}
+        >
           <TouchableOpacity
-            onPress={() => {
-              setStage('CHAPTERS');
-              setActiveChapter(null);
-            }}
+            onPress={() => setActiveChapter(null)}
             style={styles.backBtnRow}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            activeOpacity={0.7}
           >
-            <View
-              style={[
-                styles.topBackArrowBtn,
-                { backgroundColor: tokens.surface, borderColor: tokens.border },
-              ]}
-            >
-              <MasteraIcon
-                name="chevron-left"
-                size={18}
-                color={tokens.textPrimary}
-              />
-            </View>
-            <Text style={[styles.backBtnText, { color: tokens.textPrimary }]}>
-              {quizTabLabel} · Answer Review
-            </Text>
+            <MasteraIcon name="chevron-left" size={18} color={tokens.textPrimary} />
+            <Text style={[styles.backBtnText, { color: tokens.textPrimary }]}>Choose another quiz</Text>
           </TouchableOpacity>
+          <Text style={[styles.screenTitle, { color: tokens.textPrimary }]}>
+            {activeChapter.title}
+          </Text>
+          <Text style={[styles.helperText, { color: tokens.textMuted }]}>Choose how you want to attempt this quiz.</Text>
+          <View style={styles.modeChoiceCol}>
+            {([
+              ['PRACTICE', 'Practice Mode', 'See correctness and explanations immediately.'],
+              ['EXAM', 'Exam Mode', 'See answers and explanations only after submitting.'],
+            ] as const).map(([mode, title, description]) => (
+              <TouchableOpacity
+                key={mode}
+                onPress={() => setQuizMode(mode)}
+                style={[styles.modeChoiceCard, { backgroundColor: tokens.surface, borderColor: tokens.border }]}
+              >
+                <Text style={[styles.modeChoiceTitle, { color: tokens.textPrimary }]}>{title}</Text>
+                <Text style={[styles.modeChoiceDescription, { color: tokens.textMuted }]}>{description}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <Text style={[styles.helperText, { color: tokens.textMuted, marginTop: SPACING.lg }]}>Question navigation</Text>
+          <View style={styles.prevNextRow}>
+            {(['PAGED', 'SCROLL'] as const).map((mode) => (
+              <TouchableOpacity
+                key={mode}
+                onPress={() => setQuizNavigationMode(mode)}
+                style={[styles.prevNextBtn, { backgroundColor: quizNavigationMode === mode ? tokens.primary : tokens.surface, borderColor: tokens.primary }]}
+              >
+                <Text style={[styles.prevNextBtnText, { color: quizNavigationMode === mode ? tokens.surface : tokens.primary }]}>
+                  {mode === 'PAGED' ? 'Next / Previous' : 'Scroll all'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </ScrollView>
+      );
+    }
+
+    if (quizFinished && quizMode === 'EXAM') {
+      const score = questions.filter((q) => selectedAnswers[q.id] === q.correctOptionId).length;
+      return (
+        <ScrollView style={[styles.container, { backgroundColor: tokens.background }]} contentContainerStyle={styles.scrollContent}>
+          <Text style={[styles.screenTitle, { color: tokens.textPrimary }]}>Quiz submitted</Text>
+          <Text style={[styles.helperText, { color: tokens.textMuted }]}>Score: {score} / {questions.length}</Text>
+          {questions.map((q, index) => (
+            <View key={q.id} style={[styles.reviewCard, { backgroundColor: tokens.surface, borderColor: tokens.border }]}>
+              <Text style={[styles.reviewPrompt, { color: tokens.textPrimary }]}>{index + 1}. {q.promptLatex}</Text>
+              <Text style={[styles.reviewAnswerMeta, { color: selectedAnswers[q.id] === q.correctOptionId ? tokens.success : tokens.danger }]}>Your answer: {selectedAnswers[q.id] ?? 'Skipped'} · Correct: {q.correctOptionId}</Text>
+              <Text style={[styles.reviewExplanation, { color: tokens.textPrimary }]}>Explanation: {q.explanationLatex}</Text>
+            </View>
+          ))}
+          <TouchableOpacity onPress={() => { setActiveChapter(null); setQuizMode(null); setQuizFinished(false); setSelectedAnswers({}); }} style={[styles.primaryActionBtn, { backgroundColor: tokens.primary }]}>
+            <Text style={[styles.primaryActionBtnText, { color: tokens.surface }]}>Back to quizzes</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      );
+    }
+    const currentQ = questions[questionIndex] ?? questions[0];
 
           <View
             style={[
@@ -413,7 +450,45 @@ export function CourseTestsQuizFlowScreen({
     const isPractice = quizMode === 'PRACTICE';
     const currentQ = questions[questionIndex] ?? questions[0]!;
     const chosenOptionId = selectedAnswers[currentQ.id];
-    const progressRatio = (questionIndex + 1) / questions.length;
+    const showFeedback = quizMode === 'PRACTICE';
+    const progressRatio =
+      questions.length > 0 ? (questionIndex + 1) / questions.length : 1;
+
+    if (quizNavigationMode === 'SCROLL') {
+      return (
+        <ScrollView style={[styles.container, { backgroundColor: tokens.background }]} contentContainerStyle={styles.scrollContent}>
+          <View style={styles.topNavRow}>
+            <TouchableOpacity onPress={() => { setActiveChapter(null); setQuizMode(null); setQuizFinished(false); }} style={styles.backBtnRow}>
+              <MasteraIcon name="chevron-left" size={18} color={tokens.textPrimary} />
+              <Text style={[styles.backBtnText, { color: tokens.textPrimary }]}>{quizTabLabel} · {quizMode === 'PRACTICE' ? 'Practice' : 'Exam'}</Text>
+            </TouchableOpacity>
+            <View style={[styles.badgePill, { backgroundColor: tokens.primarySoft }]}><Text style={[styles.badgePillText, { color: tokens.primary }]}>{questions.length} questions</Text></View>
+          </View>
+          {questions.map((q, index) => {
+            const selected = selectedAnswers[q.id];
+            return (
+              <View key={q.id} style={[styles.reviewCard, { backgroundColor: tokens.surface, borderColor: tokens.border }]}>
+                <Text style={[styles.questionPrompt, { color: tokens.textPrimary, fontSize: 16 }]}>{index + 1}. {q.promptLatex}</Text>
+                {(q.options ?? []).map((opt) => {
+                  const selectedOption = selected === opt.id;
+                  const correctOption = opt.id === q.correctOptionId;
+                  const feedback = showFeedback && selected;
+                  return (
+                    <TouchableOpacity key={opt.id} onPress={() => setSelectedAnswers((prev) => ({ ...prev, [q.id]: opt.id }))} style={[styles.optionBtn, { backgroundColor: feedback && correctOption ? tokens.successSoft : feedback && selectedOption ? tokens.dangerSoft : tokens.surface, borderColor: selectedOption ? tokens.primary : tokens.border, borderWidth: selectedOption ? 2 : 1 }]}>
+                      <Text style={[styles.optionText, { color: tokens.textPrimary }]}>{opt.id}. {opt.textLatex}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+                {showFeedback && selected && <Text style={[styles.reviewExplanation, { color: tokens.textPrimary }]}>Explanation: {q.explanationLatex}</Text>}
+              </View>
+            );
+          })}
+          <TouchableOpacity onPress={() => { onCompleteQuizChapter(activeChapter.id, selectedAnswers, quizMode); if (quizMode === 'EXAM') { setQuizFinished(true); } else { setActiveChapter(null); setQuizMode(null); } }} style={[styles.primaryActionBtn, { backgroundColor: tokens.primary }]}>
+            <Text style={[styles.primaryActionBtnText, { color: tokens.surface }]}>{quizMode === 'EXAM' ? 'Submit quiz' : 'Finish Quiz'}</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      );
+    }
 
     return (
       <ScrollView
@@ -426,6 +501,8 @@ export function CourseTestsQuizFlowScreen({
             onPress={() => {
               setStage('CHAPTERS');
               setActiveChapter(null);
+              setQuizMode(null);
+              setQuizFinished(false);
               setQuestionIndex(0);
             }}
             style={styles.backBtnRow}
@@ -511,14 +588,53 @@ export function CourseTestsQuizFlowScreen({
           </View>
         </View>
 
-        {/* ------------------------------------------------------------------ */}
-        {/* VIEW A: PAGED STEP-BY-STEP RUNNER */}
-        {/* ------------------------------------------------------------------ */}
-        {navMode === 'PAGED' ? (
-          <View>
-            {/* Horizontal Progress Bar */}
-            <View style={[styles.progressTrack, { backgroundColor: tokens.surface, borderColor: tokens.border, marginTop: SPACING.xs }]}>
-              <View
+        {/* Question Prompt */}
+        <Text style={[styles.questionPrompt, { color: tokens.textPrimary }]}>
+          {currentQ.promptLatex}
+        </Text>
+
+        {/* Answer Options */}
+        <View style={styles.optionsCol}>
+          {(currentQ.options ?? []).map((opt) => {
+            const isSelected = chosenOptionId === opt.id;
+            const hasAnswered = !!chosenOptionId;
+            const isCorrectOption = opt.id === currentQ.correctOptionId;
+
+            let optBg = tokens.surface;
+            let optBorder = tokens.border;
+            let optTextColor = tokens.textPrimary;
+            let optBadge: string | null = null;
+            let optBadgeColor = tokens.textMuted;
+
+            if (hasAnswered && showFeedback) {
+              if (isCorrectOption) {
+                optBg = tokens.successSoft;
+                optBorder = tokens.success;
+                optTextColor = tokens.success;
+                optBadge = isSelected ? '✓ Correct (Your answer)' : '✓ Correct answer';
+                optBadgeColor = tokens.success;
+              } else if (isSelected) {
+                optBg = tokens.dangerSoft;
+                optBorder = tokens.danger;
+                optTextColor = tokens.danger;
+                optBadge = '✗ Your answer (Incorrect)';
+                optBadgeColor = tokens.danger;
+              }
+            } else if (isSelected) {
+              optBg = tokens.primarySoft;
+              optBorder = tokens.primary;
+              optTextColor = tokens.primary;
+            }
+
+            return (
+              <TouchableOpacity
+                key={opt.id}
+                onPress={() =>
+                  setSelectedAnswers((prev) => ({
+                    ...prev,
+                    [currentQ.id]: opt.id,
+                  }))
+                }
                 style={[
                   styles.progressFill,
                   {
@@ -730,14 +846,46 @@ export function CourseTestsQuizFlowScreen({
                 </Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                onPress={() => {
-                  if (questionIndex + 1 < questions.length) {
-                    setQuestionIndex((i) => i + 1);
-                  } else {
-                    onCompleteQuizChapter(activeChapter.id, selectedAnswers);
-                    setStage('REVIEW');
-                  }
+        {/* Immediate Explanation Card */}
+        {showFeedback && chosenOptionId ? (
+          <View
+            style={[
+              styles.explanationBox,
+              {
+                backgroundColor:
+                  chosenOptionId === currentQ.correctOptionId
+                    ? tokens.successSoft
+                    : tokens.surface,
+                borderColor:
+                  chosenOptionId === currentQ.correctOptionId
+                    ? tokens.success
+                    : tokens.border,
+                borderWidth: 1.5,
+                borderRadius: RADIUS.md,
+                padding: SPACING.md,
+                marginTop: SPACING.md,
+              },
+            ]}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+              <MasteraIcon
+                name={chosenOptionId === currentQ.correctOptionId ? 'check-circle' : 'info'}
+                size={18}
+                color={
+                  chosenOptionId === currentQ.correctOptionId
+                    ? tokens.success
+                    : tokens.danger
+                }
+              />
+              <Text
+                style={{
+                  fontSize: 14,
+                  fontWeight: '700',
+                  color:
+                    chosenOptionId === currentQ.correctOptionId
+                      ? tokens.success
+                      : tokens.danger,
+                  marginLeft: 8,
                 }}
                 style={[
                   styles.prevNextBtn,
@@ -940,6 +1088,30 @@ export function CourseTestsQuizFlowScreen({
             </TouchableOpacity>
           </View>
         )}
+
+        {/* Bottom Next Button */}
+        <TouchableOpacity
+          onPress={() => {
+            if (questionIndex + 1 < questions.length) {
+              setQuestionIndex((i) => i + 1);
+            } else {
+              if (quizMode === 'EXAM') {
+                onCompleteQuizChapter(activeChapter.id, selectedAnswers, quizMode);
+                setQuizFinished(true);
+              } else {
+                onCompleteQuizChapter(activeChapter.id, selectedAnswers);
+                setActiveChapter(null);
+                setQuizMode(null);
+                setQuestionIndex(0);
+              }
+            }
+          }}
+          style={[styles.primaryActionBtn, { backgroundColor: tokens.primary }]}
+        >
+          <Text style={[styles.primaryActionBtnText, { color: tokens.surface }]}>
+            {questionIndex + 1 < questions.length ? 'Next' : quizMode === 'EXAM' ? 'Submit quiz' : 'Finish Quiz'}
+          </Text>
+        </TouchableOpacity>
       </ScrollView>
     );
   }
@@ -1051,6 +1223,8 @@ export function CourseTestsQuizFlowScreen({
               onPress={() => {
                 setActiveQuizTab(tab.id);
                 setActiveChapter(null);
+                setQuizMode(null);
+                setQuizFinished(false);
                 setQuestionIndex(0);
               }}
               style={[
@@ -1119,7 +1293,11 @@ export function CourseTestsQuizFlowScreen({
               <TouchableOpacity
                 key={ch.id || `quiz-ch-${idx}`}
                 onPress={() => {
-                  setPendingChapter(ch);
+                  setActiveChapter(ch);
+                  setQuizMode(null);
+                  setQuizFinished(false);
+                  setQuestionIndex(0);
+                  setSelectedAnswers({});
                 }}
                 activeOpacity={0.7}
                 style={[
@@ -1398,24 +1576,28 @@ export function CourseExamsDirectFlowScreen({
     new Set()
   );
   const [secondsRemaining, setSecondsRemaining] = useState<number>(40 * 60);
-  const [examNavMode, setExamNavMode] = useState<'PAGED' | 'SCROLL'>('PAGED');
+  const [examNavigationMode, setExamNavigationMode] =
+    useState<QuestionNavigationMode>('PAGED');
 
   const tokens = STUDENT_THEMES[themeMode];
 
   // Active Countdown Timer for Exam Runner
   React.useEffect(() => {
-    if (stage !== 'RUNNING') return;
+    if (stage !== 'RUNNING' || !runningExamSet) return;
     const timer = setInterval(() => {
       setSecondsRemaining((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
+          onSubmitExamAttempt(runningExamSet.id, selectedAnswers);
+          setExpandedQuestionIds(new Set(getQuestionsForExamSet(runningExamSet).map((q) => q.id)));
+          setStage('REVIEW');
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [stage]);
+  }, [stage, runningExamSet, onSubmitExamAttempt, selectedAnswers]);
 
   const formattedTimer = React.useMemo(() => {
     const mins = Math.floor(secondsRemaining / 60);
@@ -1689,6 +1871,32 @@ export function CourseExamsDirectFlowScreen({
         </ScrollView>
       );
     }
+    if (examNavigationMode === 'SCROLL') {
+      return (
+        <ScrollView style={[styles.container, { backgroundColor: tokens.background }]} contentContainerStyle={styles.scrollContent}>
+          <View style={styles.topNavRow}>
+            <Text style={[styles.backBtnText, { color: tokens.textPrimary }]}>{runningExamSet.title}</Text>
+            <View style={[styles.examBadgePill, { backgroundColor: tokens.amberSoft, borderColor: tokens.border }]}>
+              <Text style={[styles.examBadgePillText, { color: tokens.amber }]}>{formattedTimer}</Text>
+            </View>
+          </View>
+          {questions.map((q, index) => (
+            <View key={q.id} style={[styles.reviewCard, { backgroundColor: tokens.surface, borderColor: tokens.border }]}>
+              <Text style={[styles.questionPrompt, { color: tokens.textPrimary, fontSize: 16 }]}>{index + 1}. {q.promptLatex}</Text>
+              {(q.options ?? []).map((opt) => (
+                <TouchableOpacity key={opt.id} onPress={() => setSelectedAnswers((prev) => ({ ...prev, [q.id]: opt.id }))} style={[styles.optionBtn, { backgroundColor: tokens.surface, borderColor: selectedAnswers[q.id] === opt.id ? tokens.amber : tokens.border, borderWidth: selectedAnswers[q.id] === opt.id ? 2 : 1 }]}>
+                  <Text style={[styles.optionText, { color: tokens.textPrimary }]}>{opt.id}. {opt.textLatex}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ))}
+          <TouchableOpacity onPress={() => { onSubmitExamAttempt(runningExamSet.id, selectedAnswers); setExpandedQuestionIds(new Set(questions.map((q) => q.id))); setStage('REVIEW'); }} style={[styles.primaryActionBtn, { backgroundColor: tokens.amber }]}>
+            <Text style={[styles.primaryActionBtnText, { color: tokens.white }]}>Submit exam</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      );
+    }
+
     const currentQ = questions[questionIndex] ?? questions[0]!;
     const chosenOptionId = currentQ ? selectedAnswers[currentQ.id] : undefined;
 
@@ -2223,6 +2431,21 @@ export function CourseExamsDirectFlowScreen({
             {pendingStartExamSet.year} {pendingStartExamSet.questionCount || 20} questions · {pendingStartExamSet.timeAllowedMinutes} min · timer starts on Start
           </Text>
 
+          <Text style={[styles.helperText, { color: tokens.textMuted }]}>Question navigation</Text>
+          <View style={styles.prevNextRow}>
+            {(['PAGED', 'SCROLL'] as const).map((mode) => (
+              <TouchableOpacity
+                key={mode}
+                onPress={() => setExamNavigationMode(mode)}
+                style={[styles.prevNextBtn, { backgroundColor: examNavigationMode === mode ? tokens.primary : tokens.surface, borderColor: tokens.primary }]}
+              >
+                <Text style={[styles.prevNextBtnText, { color: examNavigationMode === mode ? tokens.surface : tokens.primary }]}>
+                  {mode === 'PAGED' ? 'Next / Previous' : 'Scroll all'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
           {/* Solid Amber Button matching screenshot */}
           <TouchableOpacity
             onPress={() => {
@@ -2442,6 +2665,30 @@ const styles = StyleSheet.create({
   helperText: {
     fontSize: 12,
     marginBottom: SPACING.md,
+  },
+  screenTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    marginTop: SPACING.lg,
+    marginBottom: SPACING.xs,
+  },
+  modeChoiceCol: {
+    gap: SPACING.sm,
+    marginTop: SPACING.md,
+  },
+  modeChoiceCard: {
+    padding: SPACING.md,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+  },
+  modeChoiceTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  modeChoiceDescription: {
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 4,
   },
   booksCol: {
     gap: SPACING.sm,
